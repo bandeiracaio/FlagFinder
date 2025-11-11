@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlagFinder - Country Guessing Game</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FlagFinder">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="game-container">
+        <!-- Header -->
+        <header class="game-header">
+            <h1 class="game-title">FlagFinder</h1>
+            <div class="header-controls">
+                <button id="game-mode-button" class="game-mode-button" aria-label="Game mode">
+                    <span>🎮</span>
+                    <span id="game-mode-label">Classic</span>
+                </button>
+                <button id="filter-button" class="filter-button" aria-label="Filter countries">
+                    <span>🌍</span>
+                    <span id="filter-label">All Countries</span>
+                </button>
+                <button id="difficulty-button" class="difficulty-button" aria-label="Difficulty level">
+                    <span>📊</span>
+                    <span id="difficulty-label">Difficulty</span>
+                </button>
+                <button id="border-settings-button" class="border-settings-button" aria-label="Border settings">
+                    <span>🗺️</span>
+                    <span>Borders</span>
+                </button>
+                <button id="map-style-button" class="map-style-button" aria-label="Map style">
+                    <span>🌍</span>
+                    <span id="map-style-label">Map Style</span>
+                </button>
+                <button id="custom-sets-button" class="custom-sets-button" aria-label="Custom country sets">
+                    <span>⭐</span>
+                    <span>Custom Sets</span>
+                </button>
+                <button id="daily-challenge-button" class="daily-challenge-button" aria-label="Daily Challenge">
+                    <span>📅</span>
+                    <span>Daily</span>
+                </button>
+                <button id="achievements-button" class="achievements-button" aria-label="Achievements">
+                    <span>🏆</span>
+                    <span>Achievements</span>
+                </button>
+                <button id="settings-button" class="settings-button" aria-label="Settings">
+                    <span>⚙️</span>
+                    <span>Settings</span>
+                </button>
+                <button id="stats-button" class="stats-button" aria-label="Statistics">
+                    <span>📊</span>
+                    <span>Stats</span>
+                </button>
+            </div>
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-label">Score</span>
+                    <span class="stat-value" id="score">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Streak</span>
+                    <span class="stat-value" id="streak">0</span>
+                    <span id="multiplier-indicator" class="multiplier-indicator hidden">x<span id="multiplier-value">1</span></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Round</span>
+                    <span class="stat-value" id="round">1/10</span>
+                </div>
+                <div class="stat-item hidden" id="timer-stat-item">
+                    <span class="stat-label">Time</span>
+                    <span class="stat-value" id="timer">30s</span>
+                </div>
+                <div class="stat-item" id="level-stat-item">
+                    <span class="stat-label">Level</span>
+                    <span class="stat-value" id="level">1</span>
+                </div>
+                <div class="stat-item" id="xp-stat-item">
+                    <span class="stat-label">XP</span>
+                    <span class="stat-value" id="xp">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Flag Display Area -->
+        <div class="flag-container">
+            <div class="flag-wrapper">
+                <img id="flag-image" src="" alt="Country Flag" class="flag-image">
+                <div class="flag-instruction-area">
+                    <p class="flag-instruction">Click on the country with this flag!</p>
+                    <div class="flag-actions">
+                        <button id="hint-button" class="hint-button" aria-label="Get hint">
+                            <span>💡</span>
+                            <span>Hint</span>
+                        </button>
+                        <button id="quiz-mode-button" class="quiz-mode-button hidden" aria-label="Switch quiz mode">
+                            <span>🔄</span>
+                            <span>Switch Mode</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quiz Mode Selection (for Multiple Choice, etc.) -->
+        <div id="quiz-mode-selection" class="quiz-mode-selection hidden">
+            <div class="quiz-options">
+                <button class="quiz-option" data-quiz="map">🗺️ Map Click</button>
+                <button class="quiz-option" data-quiz="multiple">📝 Multiple Choice</button>
+                <button class="quiz-option" data-quiz="reverse">🔄 Reverse Quiz</button>
+                <button class="quiz-option" data-quiz="capital">🏛️ Capital Quiz</button>
+            </div>
+        </div>
+        
+        <!-- Multiple Choice Options -->
+        <div id="multiple-choice-container" class="multiple-choice-container hidden">
+            <div class="multiple-choice-options">
+                <button class="choice-option" data-choice="0"></button>
+                <button class="choice-option" data-choice="1"></button>
+                <button class="choice-option" data-choice="2"></button>
+                <button class="choice-option" data-choice="3"></button>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div id="map" class="map-container" role="application" aria-label="Interactive world map for selecting countries"></div>
+
+        <!-- Feedback Overlay -->
+        <div id="feedback-overlay" class="feedback-overlay hidden">
+            <div class="feedback-content">
+                <span id="feedback-message" class="feedback-message"></span>
+                <span id="country-name" class="country-name"></span>
+            </div>
+        </div>
+
+        <!-- Processing Overlay -->
+        <div id="processing-overlay" class="processing-overlay hidden">
+            <div class="processing-content">
+                <div class="processing-spinner"></div>
+                <p>Detecting country...</p>
+            </div>
+        </div>
+
+        <!-- Border Settings Modal -->
+        <div id="border-settings-modal" class="modal hidden" role="dialog" aria-labelledby="border-settings-title" aria-modal="true">
+            <div class="modal-content border-settings-content">
+                <h2 id="border-settings-title">Border Settings</h2>
+                <p class="filter-subtitle">Adjust border visibility for better gameplay</p>
+                
+                <div class="border-settings-options">
+                    <div class="border-setting-item">
+                        <label for="border-thickness">Border Thickness</label>
+                        <div class="slider-container">
+                            <input type="range" id="border-thickness" min="1" max="5" value="3" step="1" class="border-slider">
+                            <div class="slider-labels">
+                                <span>Thin</span>
+                                <span>Medium</span>
+                                <span>Thick</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="border-setting-item">
+                        <label for="border-contrast">Border Contrast</label>
+                        <div class="slider-container">
+                            <input type="range" id="border-contrast" min="1" max="5" value="3" step="1" class="border-slider">
+                            <div class="slider-labels">
+                                <span>Low</span>
+                                <span>Medium</span>
+                                <span>High</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="border-setting-item">
+                        <label>
+                            <input type="checkbox" id="border-overlay" checked>
+                            <span>Enhanced Border Overlay</span>
+                        </label>
+                        <p class="setting-description">Adds a subtle overlay to make borders more visible</p>
+                    </div>
+                </div>
+                
+                <div class="filter-actions">
+                    <button id="apply-border-settings-button" class="apply-filter-button">Apply</button>
+                    <button id="close-border-settings-button" class="close-filter-button">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Modal -->
+        <div id="filter-modal" class="modal hidden" role="dialog" aria-labelledby="filter-title" aria-modal="true">
+            <div class="modal-content filter-modal-content">
+                <h2 id="filter-title">Filter Countries</h2>
+                <p class="filter-subtitle">Choose which countries appear in the game</p>
+                
+                <div class="filter-options">
+                    <div class="filter-section">
+                        <h3>By Region</h3>
+                        <div class="filter-buttons">
+                            <button class="filter-option" data-filter="all">All Countries</button>
+                            <button class="filter-option" data-filter="africa">Africa</button>
+                            <button class="filter-option" data-filter="asia">Asia</button>
+                            <button class="filter-option" data-filter="europe">Europe</button>
+                            <button class="filter-option" data-filter="americas">Americas</button>
+                            <button class="filter-option" data-filter="oceania">Oceania</button>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <h3>Sub-Regions</h3>
+                        <div class="filter-buttons">
+                            <button class="filter-option" data-filter="middle-east">Middle East</button>
+                            <button class="filter-option" data-filter="southeast-asia">Southeast Asia</button>
+                            <button class="filter-option" data-filter="central-asia">Central Asia</button>
+                            <button class="filter-option" data-filter="balkans">Balkans</button>
+                            <button class="filter-option" data-filter="scandinavia">Scandinavia</button>
+                            <button class="filter-option" data-filter="baltic">Baltic States</button>
+                            <button class="filter-option" data-filter="caribbean">Caribbean</button>
+                            <button class="filter-option" data-filter="central-america">Central America</button>
+                            <button class="filter-option" data-filter="south-america">South America</button>
+                            <button class="filter-option" data-filter="west-africa">West Africa</button>
+                            <button class="filter-option" data-filter="east-africa">East Africa</button>
+                            <button class="filter-option" data-filter="southern-africa">Southern Africa</button>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <h3>By Difficulty</h3>
+                        <div class="filter-buttons">
+                            <button class="filter-option" data-filter="large">Large Countries</button>
+                            <button class="filter-option" data-filter="medium">Medium Countries</button>
+                            <button class="filter-option" data-filter="small">Small Countries</button>
+                            <button class="filter-option" data-filter="microstates">Microstates</button>
+                            <button class="filter-option" data-filter="islands">Island Nations</button>
+                            <button class="filter-option" data-filter="landlocked">Landlocked</button>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <h3>International Organizations</h3>
+                        <div class="filter-buttons">
+                            <button class="filter-option" data-filter="g20">G20 Countries</button>
+                            <button class="filter-option" data-filter="european-union">European Union</button>
+                            <button class="filter-option" data-filter="nato">NATO Members</button>
+                            <button class="filter-option" data-filter="brics">BRICS</button>
+                            <button class="filter-option" data-filter="commonwealth">Commonwealth</button>
+                            <button class="filter-option" data-filter="opec">OPEC</button>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-section">
+                        <h3>Cultural & Historical</h3>
+                        <div class="filter-buttons">
+                            <button class="filter-option" data-filter="latin-america">Latin America</button>
+                            <button class="filter-option" data-filter="former-soviet">Former Soviet Union</button>
+                            <button class="filter-option" data-filter="arab-league">Arab League</button>
+                            <button class="filter-option" data-filter="nordic">Nordic Countries</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="filter-info">
+                    <p id="filter-count">Loading...</p>
+                </div>
+                
+                <div class="filter-actions">
+                    <button id="apply-filter-button" class="apply-filter-button">Apply Filter</button>
+                    <button id="close-filter-button" class="close-filter-button">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Modal -->
+        <div id="game-over-modal" class="modal hidden" role="dialog" aria-labelledby="game-over-title" aria-modal="true">
+            <div class="modal-content">
+                <h2 id="game-over-title">Game Over!</h2>
+                <div class="final-stats">
+                    <div class="final-stat">
+                        <span class="final-stat-label">Final Score</span>
+                        <span class="final-stat-value" id="final-score">0</span>
+                    </div>
+                    <div class="final-stat">
+                        <span class="final-stat-label">Best Streak</span>
+                        <span class="final-stat-value" id="best-streak">0</span>
+                    </div>
+                    <div class="final-stat">
+                        <span class="final-stat-label">Best Accuracy</span>
+                        <span class="final-stat-value" id="best-accuracy">-</span>
+                    </div>
+                    <div class="final-stat">
+                        <span class="final-stat-label">Avg Distance</span>
+                        <span class="final-stat-value" id="avg-distance">-</span>
+                    </div>
+                </div>
+                <button id="restart-button" class="restart-button">Play Again</button>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal hidden" role="dialog" aria-labelledby="settings-title" aria-modal="true">
+            <div class="modal-content settings-modal-content">
+                <h2 id="settings-title">Settings</h2>
+                <div class="settings-options">
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="dark-mode-toggle">
+                            <span>Dark Mode</span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="sound-effects-toggle" checked>
+                            <span>Sound Effects</span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="music-toggle">
+                            <span>Background Music</span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label for="master-volume">Master Volume</label>
+                        <div class="slider-container">
+                            <input type="range" id="master-volume" min="0" max="100" value="50" step="5" class="volume-slider">
+                            <div class="slider-labels">
+                                <span>0%</span>
+                                <span>50%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="font-size">Font Size</label>
+                        <select id="font-size" class="font-size-select">
+                            <option value="small">Small</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="large">Large</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="country-labels-toggle" class="setting-checkbox">
+                            <span>Show Country Names on Map</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="filter-actions">
+                    <button id="close-settings-button" class="close-filter-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Modal -->
+        <div id="stats-modal" class="modal hidden" role="dialog" aria-labelledby="stats-title" aria-modal="true">
+            <div class="modal-content stats-modal-content">
+                <h2 id="stats-title">Statistics</h2>
+                <div class="stats-tabs">
+                    <button class="stat-tab active" data-tab="overall">Overall</button>
+                    <button class="stat-tab" data-tab="regional">By Region</button>
+                    <button class="stat-tab" data-tab="countries">By Country</button>
+                    <button class="stat-tab" data-tab="history">History</button>
+                    <button class="stat-tab" data-tab="records">Records</button>
+                </div>
+                
+                <!-- Overall Stats Tab -->
+                <div class="stats-tab-content active" id="stats-overall">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-card-label">Games Played</div>
+                            <div class="stat-card-value" id="stat-games-played">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">Total Score</div>
+                            <div class="stat-card-value" id="stat-total-score">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">Best Score</div>
+                            <div class="stat-card-value" id="stat-best-score">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">Best Streak</div>
+                            <div class="stat-card-value" id="stat-best-streak">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">Total Correct</div>
+                            <div class="stat-card-value" id="stat-total-correct">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">Total Incorrect</div>
+                            <div class="stat-card-value" id="stat-total-incorrect">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">Accuracy</div>
+                            <div class="stat-card-value" id="stat-accuracy">0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">Avg Distance</div>
+                            <div class="stat-card-value" id="stat-avg-distance">-</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Regional Stats Tab -->
+                <div class="stats-tab-content" id="stats-regional">
+                    <div id="regional-stats-list" class="regional-stats-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+                
+                <!-- Country Stats Tab -->
+                <div class="stats-tab-content" id="stats-countries">
+                    <div class="country-stats-controls">
+                        <input type="text" id="country-search" placeholder="Search countries..." class="country-search-input">
+                        <select id="country-sort" class="country-sort-select">
+                            <option value="name">Sort by Name</option>
+                            <option value="accuracy">Sort by Accuracy</option>
+                            <option value="attempts">Sort by Attempts</option>
+                        </select>
+                    </div>
+                    <div id="country-stats-list" class="country-stats-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+                
+                <!-- Game History Tab -->
+                <div class="stats-tab-content" id="stats-history">
+                    <div class="history-controls">
+                        <select id="history-filter" class="history-filter-select">
+                            <option value="all">All Games</option>
+                            <option value="classic">Classic Mode</option>
+                            <option value="daily">Daily Challenge</option>
+                            <option value="time">Time Challenge</option>
+                            <option value="endless">Endless Mode</option>
+                        </select>
+                        <button id="export-history-button" class="export-button">Export History</button>
+                    </div>
+                    <div id="game-history-list" class="game-history-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+                
+                <!-- Personal Records Tab -->
+                <div class="stats-tab-content" id="stats-records">
+                    <div class="records-grid">
+                        <div class="record-card">
+                            <div class="record-icon">🏆</div>
+                            <div class="record-label">Highest Score</div>
+                            <div class="record-value" id="record-highest-score">0</div>
+                        </div>
+                        <div class="record-card">
+                            <div class="record-icon">🔥</div>
+                            <div class="record-label">Longest Streak</div>
+                            <div class="record-value" id="record-longest-streak">0</div>
+                        </div>
+                        <div class="record-card">
+                            <div class="record-icon">⚡</div>
+                            <div class="record-label">Fastest Round</div>
+                            <div class="record-value" id="record-fastest-round">-</div>
+                        </div>
+                        <div class="record-card">
+                            <div class="record-icon">🎯</div>
+                            <div class="record-label">Best Accuracy</div>
+                            <div class="record-value" id="record-best-accuracy">0%</div>
+                        </div>
+                        <div class="record-card">
+                            <div class="record-icon">📍</div>
+                            <div class="record-label">Closest Guess</div>
+                            <div class="record-value" id="record-closest-guess">-</div>
+                        </div>
+                        <div class="record-card">
+                            <div class="record-icon">🌍</div>
+                            <div class="record-label">Most Countries</div>
+                            <div class="record-value" id="record-most-countries">0</div>
+                        </div>
+                    </div>
+                    <div class="records-actions">
+                        <button id="export-stats-csv-button" class="export-button">Export Stats as CSV</button>
+                    </div>
+                </div>
+                
+                <div class="filter-actions">
+                    <button id="share-stats-button" class="export-button">Share Stats</button>
+                    <button id="reset-stats-button" class="close-filter-button">Reset Statistics</button>
+                    <button id="close-stats-button" class="apply-filter-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Country Info Card Modal -->
+        <div id="country-info-modal" class="modal hidden" role="dialog" aria-labelledby="country-info-title" aria-modal="true">
+            <div class="modal-content country-info-modal-content">
+                <h2 id="country-info-title">Country Information</h2>
+                <div id="country-info-content" class="country-info-content">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+                <div class="filter-actions">
+                    <button id="close-country-info-button" class="apply-filter-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Country Sets Modal -->
+        <div id="custom-sets-modal" class="modal hidden" role="dialog" aria-labelledby="custom-sets-title" aria-modal="true">
+            <div class="modal-content custom-sets-modal-content">
+                <h2 id="custom-sets-title">Custom Country Sets</h2>
+                <div class="custom-sets-controls">
+                    <input type="text" id="custom-set-name" placeholder="Set name..." class="custom-set-name-input">
+                    <button id="create-custom-set-button" class="apply-filter-button">Create New Set</button>
+                </div>
+                <div id="custom-sets-list" class="custom-sets-list">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+                <div class="filter-actions">
+                    <button id="close-custom-sets-button" class="close-filter-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Difficulty Level Modal -->
+        <div id="difficulty-modal" class="modal hidden" role="dialog" aria-labelledby="difficulty-title" aria-modal="true">
+            <div class="modal-content difficulty-modal-content">
+                <h2 id="difficulty-title">Select Difficulty Level</h2>
+                <div class="difficulty-options">
+                    <button class="difficulty-option" data-difficulty="all">
+                        <span class="difficulty-icon">🌍</span>
+                        <span class="difficulty-name">All Countries</span>
+                        <span class="difficulty-description">No filter - all countries</span>
+                    </button>
+                    <button class="difficulty-option" data-difficulty="easy">
+                        <span class="difficulty-icon">🟢</span>
+                        <span class="difficulty-name">Easy</span>
+                        <span class="difficulty-description">Large, well-known countries</span>
+                    </button>
+                    <button class="difficulty-option" data-difficulty="medium">
+                        <span class="difficulty-icon">🟡</span>
+                        <span class="difficulty-name">Medium</span>
+                        <span class="difficulty-description">Mix of familiar countries</span>
+                    </button>
+                    <button class="difficulty-option" data-difficulty="hard">
+                        <span class="difficulty-icon">🟠</span>
+                        <span class="difficulty-name">Hard</span>
+                        <span class="difficulty-description">Small countries, obscure flags</span>
+                    </button>
+                    <button class="difficulty-option" data-difficulty="expert">
+                        <span class="difficulty-icon">🔴</span>
+                        <span class="difficulty-name">Expert</span>
+                        <span class="difficulty-description">Microstates and territories</span>
+                    </button>
+                </div>
+                <div class="filter-actions">
+                    <button id="close-difficulty-button" class="close-filter-button">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Share Results Modal -->
+        <div id="share-modal" class="modal hidden" role="dialog" aria-labelledby="share-title" aria-modal="true">
+            <div class="modal-content share-modal-content">
+                <h2 id="share-title">Share Your Results</h2>
+                <div id="share-preview" class="share-preview">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+                <div class="share-actions">
+                    <button id="share-twitter-button" class="share-button twitter-share">
+                        <span>🐦</span>
+                        <span>Twitter</span>
+                    </button>
+                    <button id="share-facebook-button" class="share-button facebook-share">
+                        <span>📘</span>
+                        <span>Facebook</span>
+                    </button>
+                    <button id="copy-share-link-button" class="share-button copy-share">
+                        <span>📋</span>
+                        <span>Copy Link</span>
+                    </button>
+                    <button id="download-share-image-button" class="share-button download-share">
+                        <span>💾</span>
+                        <span>Download Image</span>
+                    </button>
+                </div>
+                <div class="filter-actions">
+                    <button id="close-share-button" class="close-filter-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Set Editor Modal -->
+        <div id="custom-set-editor-modal" class="modal hidden" role="dialog" aria-labelledby="custom-set-editor-title" aria-modal="true">
+            <div class="modal-content custom-set-editor-modal-content">
+                <h2 id="custom-set-editor-title">Edit Custom Set</h2>
+                <input type="text" id="editing-set-name" class="custom-set-name-input" placeholder="Set name...">
+                <div class="custom-set-editor-controls">
+                    <input type="text" id="country-search-editor" placeholder="Search countries..." class="country-search-input">
+                    <button id="select-all-countries-button" class="close-filter-button">Select All</button>
+                    <button id="deselect-all-countries-button" class="close-filter-button">Deselect All</button>
+                </div>
+                <div id="custom-set-countries-list" class="custom-set-countries-list">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+                <div class="filter-actions">
+                    <button id="save-custom-set-button" class="apply-filter-button">Save Set</button>
+                    <button id="delete-custom-set-button" class="close-filter-button">Delete Set</button>
+                    <button id="cancel-custom-set-editor-button" class="close-filter-button">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hint Modal -->
+        <div id="hint-modal" class="modal hidden" role="dialog" aria-labelledby="hint-title" aria-modal="true">
+            <div class="modal-content hint-modal-content">
+                <h2 id="hint-title">Hints</h2>
+                <div class="hint-options">
+                    <button class="hint-option" data-hint="continent">
+                        <span>🌍</span>
+                        <span>Continent</span>
+                        <span class="hint-cost">-2 pts</span>
+                    </button>
+                    <button class="hint-option" data-hint="capital">
+                        <span>🏛️</span>
+                        <span>Capital City</span>
+                        <span class="hint-cost">-2 pts</span>
+                    </button>
+                    <button class="hint-option" data-hint="population">
+                        <span>👥</span>
+                        <span>Population Range</span>
+                        <span class="hint-cost">-2 pts</span>
+                    </button>
+                    <button class="hint-option" data-hint="neighbors">
+                        <span>🤝</span>
+                        <span>Neighboring Countries</span>
+                        <span class="hint-cost">-2 pts</span>
+                    </button>
+                </div>
+                <div id="hint-display" class="hint-display hidden">
+                    <p id="hint-text"></p>
+                </div>
+                <div class="filter-actions">
+                    <button id="close-hint-button" class="close-filter-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Mode Modal -->
+        <div id="game-mode-modal" class="modal hidden" role="dialog" aria-labelledby="game-mode-title" aria-modal="true">
+            <div class="modal-content game-mode-modal-content">
+                <h2 id="game-mode-title">Select Game Mode</h2>
+                <div class="game-mode-options">
+                    <button class="game-mode-option" data-mode="classic">
+                        <span class="mode-icon">🎯</span>
+                        <span class="mode-name">Classic</span>
+                        <span class="mode-description">10 rounds with scoring</span>
+                    </button>
+                    <button class="game-mode-option" data-mode="practice">
+                        <span class="mode-icon">📚</span>
+                        <span class="mode-name">Practice</span>
+                        <span class="mode-description">Learn without pressure</span>
+                    </button>
+                    <button class="game-mode-option" data-mode="daily">
+                        <span class="mode-icon">📅</span>
+                        <span class="mode-name">Daily Challenge</span>
+                        <span class="mode-description">Same flags for everyone</span>
+                    </button>
+                    <button class="game-mode-option" data-mode="time">
+                        <span class="mode-icon">⏱️</span>
+                        <span class="mode-name">Time Challenge</span>
+                        <span class="mode-description">30 seconds per flag</span>
+                    </button>
+                    <button class="game-mode-option" data-mode="endless">
+                        <span class="mode-icon">♾️</span>
+                        <span class="mode-name">Endless</span>
+                        <span class="mode-description">Play until wrong</span>
+                    </button>
+                </div>
+                <div class="filter-actions">
+                    <button id="close-game-mode-button" class="close-filter-button">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Achievements Modal -->
+        <div id="achievements-modal" class="modal hidden" role="dialog" aria-labelledby="achievements-title" aria-modal="true">
+            <div class="modal-content achievements-modal-content">
+                <h2 id="achievements-title">Achievements</h2>
+                <div id="achievements-grid" class="achievements-grid">
+                    <!-- Achievements will be populated by JavaScript -->
+                </div>
+                <div class="filter-actions">
+                    <button id="close-achievements-button" class="apply-filter-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tutorial Overlay -->
+        <div id="tutorial-overlay" class="tutorial-overlay hidden">
+            <div class="tutorial-content">
+                <div class="tutorial-slide" id="tutorial-slide-1">
+                    <h2>Welcome to FlagFinder!</h2>
+                    <p>Learn how to play in just a few steps.</p>
+                    <div class="tutorial-navigation">
+                        <button id="tutorial-next" class="apply-filter-button">Next</button>
+                        <button id="tutorial-skip" class="close-filter-button">Skip Tutorial</button>
+                    </div>
+                </div>
+                <div class="tutorial-slide hidden" id="tutorial-slide-2">
+                    <h2>How to Play</h2>
+                    <p>1. A flag will appear at the top</p>
+                    <p>2. Click on the world map where you think that country is located</p>
+                    <p>3. Get points for correct answers!</p>
+                    <div class="tutorial-navigation">
+                        <button id="tutorial-prev-2" class="close-filter-button">Previous</button>
+                        <button id="tutorial-next-2" class="apply-filter-button">Next</button>
+                    </div>
+                </div>
+                <div class="tutorial-slide hidden" id="tutorial-slide-3">
+                    <h2>Scoring</h2>
+                    <p>• Correct answer: +10 points</p>
+                    <p>• Streak multipliers: 3+ streak = 2x, 5+ streak = 3x</p>
+                    <p>• Hints cost 2 points each</p>
+                    <div class="tutorial-navigation">
+                        <button id="tutorial-prev-3" class="close-filter-button">Previous</button>
+                        <button id="tutorial-next-3" class="apply-filter-button">Next</button>
+                    </div>
+                </div>
+                <div class="tutorial-slide hidden" id="tutorial-slide-4">
+                    <h2>Features</h2>
+                    <p>• Use filters to focus on specific regions</p>
+                    <p>• Try Practice Mode to learn without scoring</p>
+                    <p>• Check your statistics and achievements</p>
+                    <div class="tutorial-navigation">
+                        <button id="tutorial-prev-4" class="close-filter-button">Previous</button>
+                        <button id="tutorial-finish" class="apply-filter-button">Start Playing!</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p id="loading-message">Loading countries...</p>
+            <p id="loading-hint" class="loading-hint hidden">If this persists, you may need to run a local web server.</p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
+

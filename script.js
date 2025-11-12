@@ -1713,11 +1713,13 @@ function showCountryInfoCard(country, isCorrect, distance) {
     const infoCard = document.getElementById('country-info-card-integrated');
     if (!infoCard) return;
     
-    // Get country data
-    const capital = country.capital && country.capital[0] ? country.capital[0] : 'N/A';
+    // Get country data (handle both array and string formats for capital)
+    const capital = country.capital 
+        ? (Array.isArray(country.capital) && country.capital[0] ? country.capital[0] : country.capital)
+        : 'N/A';
     const population = country.population ? formatNumber(country.population) : 'N/A';
     const area = country.area ? `${formatNumber(Math.round(country.area))} km²` : 'N/A';
-    const region = country.region || 'N/A';
+    const region = country.region || country.subregion || 'N/A';
     
     // Build card HTML
     infoCard.innerHTML = `
@@ -3661,10 +3663,10 @@ async function fetchCountries() {
     // Try multiple API endpoints and methods
     // Note: Some endpoints may require 'fields' parameter
     const apiEndpoints = [
-        // Try v3.1 with fields parameter (if required)
-        { url: 'https://restcountries.com/v3.1/all?fields=name,cca2,latlng', method: 'GET' },
-        // Try v3.1 without fields (standard)
+        // Try v3.1 without fields (standard) - get all data including capital, population, area, region
         { url: 'https://restcountries.com/v3.1/all', method: 'GET' },
+        // Try v3.1 with fields parameter (fallback if needed)
+        { url: 'https://restcountries.com/v3.1/all?fields=name,cca2,latlng,capital,population,area,region,subregion', method: 'GET' },
         // Try v3
         { url: 'https://restcountries.com/v3/all', method: 'GET' },
         // Try v2 (older version)
@@ -3756,11 +3758,23 @@ async function fetchCountries() {
                 const countryName = country.name?.common || country.name || 'Unknown';
                 const countryLatLng = country.latlng || [0, 0];
                 
+                // Extract additional country information
+                const capital = country.capital && Array.isArray(country.capital) && country.capital.length > 0 
+                    ? country.capital[0] 
+                    : (country.capital || null);
+                const population = country.population || null;
+                const area = country.area || null;
+                const region = country.region || country.subregion || null;
+                
                 const countryData = {
                     name: countryName,
                     code: countryCode,
                     latlng: countryLatLng,
-                    flag: `https://flagcdn.com/w320/${countryCode}.png`
+                    flag: `https://flagcdn.com/w320/${countryCode}.png`,
+                    capital: capital,
+                    population: population,
+                    area: area,
+                    region: region
                 };
                 
                 // Validate the mapped data

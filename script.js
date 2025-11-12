@@ -66,7 +66,7 @@ let dailyChallengeCountries = [];
 let dailyChallengeDate = null;
 let currentQuizType = 'map'; // 'map', 'multiple', 'reverse', 'capital'
 let timerInterval = null;
-let timeRemaining = 30;
+let timeRemaining = 3;
 let gameHistory = [];
 let customCountrySets = {};
 let editingCustomSetId = null;
@@ -86,6 +86,9 @@ let personalRecords = {
 let showCountryLabels = false;
 let countryLabelsLayer = null;
 let countryHighlightLayer = null;
+let countryBordersLayer = null; // GeoJSON layer for country borders
+let bordersGeoJSONCache = null; // Cache for pre-loaded borders GeoJSON data
+let bordersLoadingPromise = null; // Promise for borders loading to avoid duplicate requests
 
 // Settings stored in localStorage
 let gameSettings = {
@@ -1497,7 +1500,7 @@ function initializeDailyChallenge() {
 function startTimer() {
     if (currentGameMode !== 'time') return;
     
-    timeRemaining = 30;
+    timeRemaining = 3;
     if (timerElement) {
         timerElement.textContent = `${timeRemaining}s`;
         timerElement.classList.remove('warning');
@@ -1511,7 +1514,7 @@ function startTimer() {
         timeRemaining--;
         if (timerElement) {
             timerElement.textContent = `${timeRemaining}s`;
-            if (timeRemaining <= 10) {
+            if (timeRemaining <= 1) {
                 timerElement.classList.add('warning');
             } else {
                 timerElement.classList.remove('warning');
@@ -1985,6 +1988,280 @@ function deleteCustomSet(setId) {
     }
 }
 
+// ==================== COUNTRY BORDERS OVERLAY ====================
+
+// Add country borders overlay layer for clearer borders
+function addCountryBordersLayer() {
+    if (!gameState.map) return;
+    
+    // If GeoJSON is already cached, use it immediately (no lag)
+    if (bordersGeoJSONCache) {
+        try {
+            const style = getBorderStyle();
+            
+            // Remove existing layer
+            if (countryBordersLayer) {
+                gameState.map.removeLayer(countryBordersLayer);
+                countryBordersLayer = null;
+            }
+            
+            // Create layer synchronously since data is cached
+            countryBordersLayer = L.geoJSON(bordersGeoJSONCache, {
+                style: function(feature) {
+                    return {
+                        color: style.color,
+                        weight: style.weight,
+                        opacity: style.opacity,
+                        fillColor: 'transparent',
+                        fillOpacity: 0,
+                        dashArray: borderSettings.thickness <= 2 ? '5,5' : 'none'
+                    };
+                },
+                interactive: false,
+                pane: 'overlayPane',
+                renderer: L.canvas({ padding: 0.5 })
+            });
+            
+            // Add to map if overlay is enabled
+            if (borderSettings.overlay !== false) {
+                countryBordersLayer.addTo(gameState.map);
+            }
+            return;
+        } catch (error) {
+            console.warn('Error using cached borders, falling back:', error);
+        }
+    }
+    
+    // Try to load GeoJSON borders (async)
+    // Fallback to tile-based if GeoJSON fails
+    loadCountryBordersGeoJSON().catch(() => {
+        // Fallback: Use tile-based borders overlay
+        addTileBasedBorders();
+    });
+}
+
+// Add tile-based borders overlay (fallback method)
+function addTileBasedBorders() {
+    if (!gameState.map) return;
+    
+    // Remove existing borders layer if present
+    if (countryBordersLayer) {
+        gameState.map.removeLayer(countryBordersLayer);
+        countryBordersLayer = null;
+    }
+    
+    const borderStyle = getBorderStyle();
+    
+    // Use a borders-only tile layer for clearer country boundaries
+    // This overlay shows only country borders
+    countryBordersLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+        attribution: '',
+        maxZoom: 6,
+        subdomains: 'abcd',
+        tileSize: 256,
+        zoomOffset: 0,
+        opacity: borderStyle.opacity * 0.8, // Adjust opacity based on contrast setting
+        pane: 'overlayPane',
+        className: 'country-borders-tile-layer'
+    });
+    
+    // Add borders layer to map
+    if (borderSettings.overlay !== false) {
+        countryBordersLayer.addTo(gameState.map);
+    }
+}
+
+// Get border style based on settings
+function getBorderStyle() {
+    const thickness = borderSettings.thickness || 3;
+    const contrast = borderSettings.contrast || 3;
+    
+    // Calculate weight: 1-2 = 1.5px, 3 = 2px, 4-5 = 3px
+    let weight;
+    if (thickness <= 2) {
+        weight = 1.5;
+    } else if (thickness === 3) {
+        weight = 2;
+    } else {
+        weight = 3;
+    }
+    
+    // Calculate opacity: higher contrast = more visible
+    const opacity = Math.max(0.5, Math.min(1.0, 0.4 + (contrast - 1) * 0.15));
+    
+    // Calculate color: higher contrast = darker
+    let color;
+    if (contrast <= 2) {
+        color = '#888888';
+    } else if (contrast === 3) {
+        color = '#333333';
+    } else {
+        color = '#000000';
+    }
+    
+    return {
+        weight: weight,
+        opacity: opacity,
+        color: color,
+        fillOpacity: 0
+    };
+}
+
+// Update borders layer style
+function updateBordersLayerStyle() {
+    if (!gameState.map) return;
+    
+    const style = getBorderStyle();
+    const wasAdded = countryBordersLayer && gameState.map.hasLayer(countryBordersLayer);
+    
+    // Check if it's a GeoJSON layer or tile layer
+    if (countryBordersLayer && countryBordersLayer.eachLayer) {
+        // GeoJSON layer - update style of each feature (smooth update)
+        countryBordersLayer.eachLayer(function(layer) {
+            layer.setStyle({
+                color: style.color,
+                weight: style.weight,
+                opacity: style.opacity,
+                dashArray: borderSettings.thickness <= 2 ? '5,5' : 'none'
+            });
+        });
+    } else {
+        // Tile layer or no layer - recreate with new style
+        if (countryBordersLayer && wasAdded) {
+            gameState.map.removeLayer(countryBordersLayer);
+        }
+        
+        // If we have cached GeoJSON, recreate GeoJSON layer with new style
+        if (bordersGeoJSONCache) {
+            countryBordersLayer = L.geoJSON(bordersGeoJSONCache, {
+                style: function(feature) {
+                    return {
+                        color: style.color,
+                        weight: style.weight,
+                        opacity: style.opacity,
+                        fillColor: 'transparent',
+                        fillOpacity: 0,
+                        dashArray: borderSettings.thickness <= 2 ? '5,5' : 'none'
+                    };
+                },
+                interactive: false,
+                pane: 'overlayPane',
+                renderer: L.canvas({ padding: 0.5 })
+            });
+        } else {
+            // Fallback to tile layer
+            countryBordersLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+                attribution: '',
+                maxZoom: 6,
+                subdomains: 'abcd',
+                tileSize: 256,
+                zoomOffset: 0,
+                opacity: style.opacity * 0.8,
+                pane: 'overlayPane',
+                className: 'country-borders-tile-layer'
+            });
+        }
+        
+        if (wasAdded && borderSettings.overlay !== false) {
+            countryBordersLayer.addTo(gameState.map);
+        }
+    }
+}
+
+// Pre-load country borders GeoJSON data (call early in initialization)
+async function preloadCountryBordersGeoJSON() {
+    // If already loading, return the existing promise
+    if (bordersLoadingPromise) {
+        return bordersLoadingPromise;
+    }
+    
+    // If already cached, return immediately
+    if (bordersGeoJSONCache) {
+        return Promise.resolve(bordersGeoJSONCache);
+    }
+    
+    // Start loading
+    bordersLoadingPromise = (async () => {
+        try {
+            // Use Natural Earth 110m countries GeoJSON (simplified for performance)
+            const response = await fetch('https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson');
+            if (!response.ok) throw new Error('Failed to fetch borders');
+            
+            const geojson = await response.json();
+            bordersGeoJSONCache = geojson; // Cache the data
+            console.log('Country borders GeoJSON pre-loaded successfully');
+            return geojson;
+        } catch (error) {
+            console.warn('Failed to pre-load GeoJSON borders:', error);
+            bordersLoadingPromise = null; // Reset on error so we can retry
+            throw error;
+        }
+    })();
+    
+    return bordersLoadingPromise;
+}
+
+// Load country borders from GeoJSON (more accurate)
+async function loadCountryBordersGeoJSON() {
+    if (!gameState.map) return;
+    
+    try {
+        let geojson;
+        
+        // Use cached data if available, otherwise fetch
+        if (bordersGeoJSONCache) {
+            geojson = bordersGeoJSONCache;
+        } else if (bordersLoadingPromise) {
+            // Wait for ongoing load
+            geojson = await bordersLoadingPromise;
+        } else {
+            // Start new fetch
+            const response = await fetch('https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson');
+            if (!response.ok) throw new Error('Failed to fetch borders');
+            geojson = await response.json();
+            bordersGeoJSONCache = geojson; // Cache for future use
+        }
+        
+        const style = getBorderStyle();
+        
+        // Remove existing layer
+        if (countryBordersLayer) {
+            gameState.map.removeLayer(countryBordersLayer);
+            countryBordersLayer = null;
+        }
+        
+        // Create GeoJSON layer with borders only (no fill)
+        // Use requestAnimationFrame to ensure smooth rendering
+        requestAnimationFrame(() => {
+            countryBordersLayer = L.geoJSON(geojson, {
+                style: function(feature) {
+                    return {
+                        color: style.color,
+                        weight: style.weight,
+                        opacity: style.opacity,
+                        fillColor: 'transparent',
+                        fillOpacity: 0,
+                        dashArray: borderSettings.thickness <= 2 ? '5,5' : 'none'
+                    };
+                },
+                interactive: false,
+                pane: 'overlayPane',
+                renderer: L.canvas({ padding: 0.5 }) // Use canvas renderer for better performance
+            });
+            
+            // Add to map if overlay is enabled
+            if (borderSettings.overlay !== false) {
+                countryBordersLayer.addTo(gameState.map);
+            }
+        });
+        
+        console.log('Country borders loaded successfully');
+    } catch (error) {
+        console.warn('Failed to load GeoJSON borders, using tile-based borders:', error);
+        throw error; // Re-throw to trigger fallback
+    }
+}
+
 // ==================== MAP STYLE TOGGLE ====================
 
 // Toggle map style
@@ -2006,14 +2283,24 @@ function toggleMapStyle() {
                 attribution: '&copy; Esri',
                 maxZoom: 19
             });
+            // Remove borders overlay on satellite view (not needed)
+            if (countryBordersLayer) {
+                gameState.map.removeLayer(countryBordersLayer);
+            }
         } else {
-            gameState.mapTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+            gameState.mapTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
                 subdomains: 'abcd',
                 maxZoom: 20,
                 tileSize: 256,
                 zoomOffset: 0
             });
+            // Re-add borders overlay on political view
+            if (countryBordersLayer && borderSettings.overlay !== false) {
+                countryBordersLayer.addTo(gameState.map);
+            } else {
+                addCountryBordersLayer();
+            }
         }
         
         gameState.mapTileLayer.addTo(gameState.map);
@@ -2071,27 +2358,44 @@ function setDifficulty(difficulty) {
     
     // Apply filter (but preserve any existing custom filter)
     if (difficulty === 'all') {
-        // If no other filter is active, reset to all countries
-        if (!gameState.currentFilter || gameState.currentFilter.startsWith('difficulty-')) {
-            gameState.filteredCountries = [...gameState.allCountries];
-            gameState.currentFilter = 'all';
-            if (filterLabel) {
-                filterLabel.textContent = 'All Countries';
+        // Check if there's a custom filter (not difficulty-based) that should be preserved
+        const hasCustomFilter = gameState.currentFilter && 
+            !gameState.currentFilter.startsWith('difficulty-') && 
+            gameState.currentFilter !== 'all';
+        
+        if (hasCustomFilter) {
+            // Preserve the custom filter - don't reset anything
+            console.log('setDifficulty("all") - Preserving custom filter:', gameState.currentFilter);
+        } else {
+            // No custom filter, safe to reset to all countries
+            if (!gameState.currentFilter || gameState.currentFilter.startsWith('difficulty-')) {
+                gameState.filteredCountries = [...gameState.allCountries];
+                gameState.currentFilter = 'all';
+                if (filterLabel) {
+                    filterLabel.textContent = 'All Countries';
+                }
             }
         }
     } else {
         const filter = difficultyFilters[difficulty];
         if (filter) {
-            // Apply difficulty filter to current filtered countries (if custom filter exists)
-            // or to all countries
-            const basePool = gameState.currentFilter && !gameState.currentFilter.startsWith('difficulty-') 
-                ? gameState.filteredCountries 
-                : gameState.allCountries;
-            gameState.filteredCountries = basePool.filter(filter);
-        }
-        gameState.currentFilter = `difficulty-${difficulty}`;
-        if (filterLabel) {
-            filterLabel.textContent = difficultyLabel ? difficultyLabel.textContent : 'All Countries';
+            // Check if there's a custom filter that should be preserved
+            const hasCustomFilter = gameState.currentFilter && 
+                !gameState.currentFilter.startsWith('difficulty-') && 
+                gameState.currentFilter !== 'all';
+            
+            if (hasCustomFilter) {
+                // Apply difficulty filter to current filtered countries (preserve custom filter)
+                gameState.filteredCountries = gameState.filteredCountries.filter(filter);
+                // Don't overwrite currentFilter - keep the custom filter name
+            } else {
+                // No custom filter, apply difficulty to all countries
+                gameState.filteredCountries = gameState.allCountries.filter(filter);
+                gameState.currentFilter = `difficulty-${difficulty}`;
+                if (filterLabel) {
+                    filterLabel.textContent = difficultyLabel ? difficultyLabel.textContent : 'All Countries';
+                }
+            }
         }
     }
     
@@ -2753,6 +3057,11 @@ async function initGame() {
         initializeCountryLabels();
         initializeOfflineIndicator();
         
+        // Pre-load borders GeoJSON early (in parallel with country data)
+        const bordersPreloadPromise = preloadCountryBordersGeoJSON().catch(err => {
+            console.warn('Borders pre-load failed, will retry later:', err);
+        });
+        
         // Fetch country data
         await fetchCountries();
         
@@ -2763,6 +3072,13 @@ async function initGame() {
         
         // Check if pre-download is needed
         checkPreDownloadStatus();
+        
+        // Wait a bit for borders to finish pre-loading (but don't block)
+        // This ensures borders are ready when map initializes
+        await Promise.race([
+            bordersPreloadPromise,
+            new Promise(resolve => setTimeout(resolve, 100)) // Max 100ms wait
+        ]);
         
         // Initialize map
         initMap();
@@ -2952,7 +3268,41 @@ async function fetchCountries() {
             
             // Store all countries and set as filtered countries
             gameState.allCountries = [...gameState.countries];
-            gameState.filteredCountries = [...gameState.countries];
+            // Only reset filteredCountries if no custom filter is currently set
+            // This preserves user's filter selection if fetchCountries() is called again
+            if (!gameState.currentFilter || gameState.currentFilter === 'all' || gameState.currentFilter.startsWith('difficulty-')) {
+                gameState.filteredCountries = [...gameState.countries];
+            } else {
+                // Custom filter is set - reapply it to the new country list
+                console.log('fetchCountries() - Reapplying custom filter:', gameState.currentFilter);
+                let filterTypes = [];
+                let subtractTypes = [];
+                
+                // Check if filter contains subtraction (format: "add1,add2|subtract1,subtract2")
+                if (gameState.currentFilter.includes('|')) {
+                    const [addPart, subtractPart] = gameState.currentFilter.split('|');
+                    if (addPart && addPart !== 'all') {
+                        filterTypes = addPart.includes(',') ? addPart.split(',') : [addPart];
+                    } else {
+                        filterTypes = ['all'];
+                    }
+                    if (subtractPart) {
+                        subtractTypes = subtractPart.includes(',') ? subtractPart.split(',') : [subtractPart];
+                    }
+                } else {
+                    // No subtraction, just add filters
+                    filterTypes = gameState.currentFilter.includes(',') 
+                        ? gameState.currentFilter.split(',') 
+                        : [gameState.currentFilter];
+                }
+                
+                // Temporarily clear currentFilter to avoid recursion
+                const savedFilter = gameState.currentFilter;
+                gameState.currentFilter = null;
+                applyFilter(filterTypes, subtractTypes);
+                // Restore the filter name (applyFilter sets it, but just to be safe)
+                gameState.currentFilter = savedFilter;
+            }
             
             console.log(`Successfully loaded ${gameState.countries.length} countries from ${endpoint}`);
             console.log('Sample country:', gameState.countries[0]);
@@ -3004,15 +3354,18 @@ function initMap() {
     // Position zoom controls in a better location
     gameState.map.zoomControl.setPosition('topright');
 
-    // Add map tiles with clear, prominent country borders (no labels)
-    // Using CartoDB Positron No Labels - cleaner and has better border visibility
-    gameState.mapTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+    // Add map tiles with modern, clean style
+    // Using CartoDB Voyager No Labels - modern, colorful, and clean
+    gameState.mapTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap contributors, © CARTO',
         maxZoom: 6,
         subdomains: 'abcd',
         tileSize: 256,
         zoomOffset: 0
     }).addTo(gameState.map);
+    
+    // Add country borders overlay layer for clearer borders
+    addCountryBordersLayer();
     
     // Add click handler to map (works for both mouse and touch)
     gameState.map.on('click', handleMapClick);
@@ -3472,7 +3825,52 @@ function startRound() {
         }).filter(c => c !== undefined);
     } else {
         // Use filtered countries pool
-        countryPool = gameState.filteredCountries.length > 0 ? gameState.filteredCountries : gameState.allCountries;
+        // Debug: Log the state BEFORE the condition check
+        console.log(`Round ${gameState.currentRound}: DEBUG - filteredCountries exists:`, !!gameState.filteredCountries);
+        console.log(`Round ${gameState.currentRound}: DEBUG - filteredCountries.length:`, gameState.filteredCountries?.length || 0);
+        console.log(`Round ${gameState.currentRound}: DEBUG - filteredCountries is array:`, Array.isArray(gameState.filteredCountries));
+        console.log(`Round ${gameState.currentRound}: DEBUG - currentFilter:`, gameState.currentFilter);
+        console.log(`Round ${gameState.currentRound}: DEBUG - filteredCountries content:`, gameState.filteredCountries?.map(c => `${c.name} (${c.code})`) || 'null/undefined');
+        
+        // Ensure filteredCountries is valid - if it's empty or invalid, fall back to allCountries
+        // but only if no custom filter is set (to avoid resetting user's filter)
+        if (gameState.filteredCountries && Array.isArray(gameState.filteredCountries) && gameState.filteredCountries.length > 0) {
+            // Create a copy to avoid reference issues
+            countryPool = [...gameState.filteredCountries];
+            // Debug: Log which pool is being used
+            console.log(`Round ${gameState.currentRound}: Using filtered pool (${countryPool.length} countries), filter: ${gameState.currentFilter}`);
+            console.log(`Round ${gameState.currentRound}: Filtered countries are:`, countryPool.map(c => `${c.name} (${c.code})`));
+        } else if (gameState.currentFilter && gameState.currentFilter !== 'all' && !gameState.currentFilter.startsWith('difficulty-')) {
+            // Custom filter is set but filteredCountries is empty - this shouldn't happen, reapply filter
+            console.warn('Filtered countries pool is empty but custom filter is set. Reapplying filter:', gameState.currentFilter);
+            let filterTypes = [];
+            let subtractTypes = [];
+            
+            // Check if filter contains subtraction (format: "add1,add2|subtract1,subtract2")
+            if (gameState.currentFilter.includes('|')) {
+                const [addPart, subtractPart] = gameState.currentFilter.split('|');
+                if (addPart && addPart !== 'all') {
+                    filterTypes = addPart.includes(',') ? addPart.split(',') : [addPart];
+                } else {
+                    filterTypes = ['all'];
+                }
+                if (subtractPart) {
+                    subtractTypes = subtractPart.includes(',') ? subtractPart.split(',') : [subtractPart];
+                }
+            } else {
+                // No subtraction, just add filters
+                filterTypes = gameState.currentFilter.includes(',') 
+                    ? gameState.currentFilter.split(',') 
+                    : [gameState.currentFilter];
+            }
+            applyFilter(filterTypes, subtractTypes);
+            countryPool = gameState.filteredCountries && gameState.filteredCountries.length > 0 ? [...gameState.filteredCountries] : [...gameState.allCountries];
+        } else {
+            // No custom filter or filter is 'all', use all countries
+            countryPool = [...gameState.allCountries];
+            console.log(`Round ${gameState.currentRound}: Using all countries pool (${countryPool.length} countries), filter: ${gameState.currentFilter || 'none'}`);
+            console.warn(`Round ${gameState.currentRound}: WARNING - Falling back to all countries even though filter is set!`);
+        }
     }
     
     // Validate countries array
@@ -3481,28 +3879,45 @@ function startRound() {
     }
 
     // Select random country (avoid repeating the previous one)
-    let randomIndex;
+    // Use Fisher-Yates shuffle for better randomness, then pick from shuffled array
+    const shuffledPool = [...countryPool];
+    for (let i = shuffledPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledPool[i], shuffledPool[j]] = [shuffledPool[j], shuffledPool[i]];
+    }
+    
+    // Find index of country that's not the previous one
+    let randomIndex = 0;
     let attempts = 0;
     do {
-        randomIndex = Math.floor(Math.random() * countryPool.length);
+        randomIndex = Math.floor(Math.random() * shuffledPool.length);
         attempts++;
         // Prevent infinite loop if there's only one country (shouldn't happen)
         if (attempts > 10) break;
-    } while (countryPool[randomIndex] === gameState.previousCountry && countryPool.length > 1);
+    } while (shuffledPool[randomIndex] === gameState.previousCountry && shuffledPool.length > 1);
+    
+    // Use the shuffled pool for selection
+    const selectedFromPool = shuffledPool[randomIndex];
     
     // For daily mode, use sequential countries
     let selectedCountry;
     if (currentGameMode === 'daily' && dailyChallengeCountries.length > 0 && countryPool.length >= gameState.currentRound) {
         selectedCountry = countryPool[gameState.currentRound - 1];
     } else {
-        // Validate selected country
-        selectedCountry = countryPool[randomIndex];
+        // Use the randomly selected country from shuffled pool
+        selectedCountry = selectedFromPool;
         if (!selectedCountry || !selectedCountry.name || !selectedCountry.code) {
             console.error('Invalid country selected:', selectedCountry);
             console.error('Countries array:', gameState.countries);
             throw new Error('Invalid country data structure. Check console for details.');
         }
     }
+    
+    // Debug: Log selected country and verify it's in the filtered pool
+    console.log(`Round ${gameState.currentRound}: Selected country: ${selectedCountry.name} (${selectedCountry.code})`);
+    console.log(`Round ${gameState.currentRound}: Country pool contains this country:`, countryPool.some(c => c.code === selectedCountry.code));
+    console.log(`Round ${gameState.currentRound}: All countries in pool:`, countryPool.map(c => `${c.name} (${c.code})`));
+    console.log(`Round ${gameState.currentRound}: Filter state - currentFilter: ${gameState.currentFilter}, filteredCountries.length: ${gameState.filteredCountries?.length || 0}`);
     
     gameState.previousCountry = gameState.currentCountry;
     gameState.currentCountry = selectedCountry;
@@ -3694,6 +4109,9 @@ function restartGame() {
     // Stop timer
     stopTimer();
     
+    // Debug: Log filter state before restart
+    console.log('restartGame() called - Current filter:', gameState.currentFilter, 'Filtered countries:', gameState.filteredCountries?.length || 0);
+    
     gameState.score = 0;
     gameState.streak = 0;
     gameState.bestStreak = 0;
@@ -3710,6 +4128,9 @@ function restartGame() {
     gameState.incorrectAnswers = 0;
     gameState.hintsUsed = [];
     
+    // NOTE: We intentionally do NOT reset gameState.filteredCountries or gameState.currentFilter
+    // These should persist across game restarts to maintain the user's filter selection
+    
     // Reset hints
     resetHints();
     
@@ -3722,6 +4143,10 @@ function restartGame() {
     
     gameOverModal.classList.add('hidden');
     updateUI();
+    
+    // Debug: Log filter state after restart (before startRound)
+    console.log('restartGame() - After reset, filter:', gameState.currentFilter, 'Filtered countries:', gameState.filteredCountries?.length || 0);
+    
     startRound();
 }
 
@@ -3749,7 +4174,10 @@ restartButton.setAttribute('tabindex', '0');
 restartButton.setAttribute('aria-label', 'Restart game');
 
 // Filter system
-let selectedFilterType = 'all';
+let selectedFilters = ['all']; // Array of selected filter types (supports multiple selections)
+let subtractFilters = []; // Array of filter types to subtract from the pool
+// Filter states: null = not selected, 'add' = include, 'subtract' = exclude
+let filterStates = {}; // { filterType: 'add' | 'subtract' | null }
 
 // Country filter definitions
 const countryFilters = {
@@ -3762,7 +4190,7 @@ const countryFilters = {
     
     // Sub-regions
     'middle-east': (country) => {
-        const codes = ['sa', 'ae', 'iq', 'ir', 'jo', 'kw', 'lb', 'om', 'qa', 'sy', 'ye', 'bh', 'cy', 'tr', 'eg', 'ps'];
+        const codes = ['sa', 'ae', 'iq', 'ir', 'jo', 'kw', 'lb', 'om', 'qa', 'sy', 'ye', 'bh', 'cy', 'tr', 'eg', 'ps', 'il'];
         return codes.includes(country.code);
     },
     'southeast-asia': (country) => {
@@ -3783,6 +4211,50 @@ const countryFilters = {
     },
     'baltic': (country) => {
         const codes = ['ee', 'lv', 'lt'];
+        return codes.includes(country.code);
+    },
+    'north-africa': (country) => {
+        const codes = ['dz', 'eg', 'ly', 'ma', 'sd', 'tn', 'eh'];
+        return codes.includes(country.code);
+    },
+    'central-africa': (country) => {
+        const codes = ['td', 'cm', 'cf', 'cg', 'cd', 'gq', 'ga', 'ao', 'st'];
+        return codes.includes(country.code);
+    },
+    'horn-of-africa': (country) => {
+        const codes = ['dj', 'er', 'et', 'so'];
+        return codes.includes(country.code);
+    },
+    'east-asia': (country) => {
+        const codes = ['cn', 'jp', 'kp', 'kr', 'mn', 'tw', 'hk', 'mo'];
+        return codes.includes(country.code);
+    },
+    'south-asia': (country) => {
+        const codes = ['af', 'bd', 'bt', 'in', 'mv', 'np', 'pk', 'lk'];
+        return codes.includes(country.code);
+    },
+    'west-asia': (country) => {
+        const codes = ['am', 'az', 'bh', 'cy', 'ge', 'ir', 'iq', 'il', 'jo', 'kw', 'lb', 'om', 'ps', 'qa', 'sa', 'sy', 'tr', 'ae', 'ye'];
+        return codes.includes(country.code);
+    },
+    'north-america': (country) => {
+        const codes = ['ca', 'mx', 'us', 'gl', 'pm'];
+        return codes.includes(country.code);
+    },
+    'andean': (country) => {
+        const codes = ['bo', 'co', 'ec', 'pe', 've'];
+        return codes.includes(country.code);
+    },
+    'mediterranean': (country) => {
+        const codes = ['al', 'dz', 'ba', 'hr', 'cy', 'eg', 'fr', 'gr', 'il', 'it', 'lb', 'ly', 'mt', 'me', 'ma', 'si', 'es', 'sy', 'tn', 'tr', 'xk'];
+        return codes.includes(country.code);
+    },
+    'benelux': (country) => {
+        const codes = ['be', 'nl', 'lu'];
+        return codes.includes(country.code);
+    },
+    'visegrad': (country) => {
+        const codes = ['cz', 'hu', 'pl', 'sk'];
         return codes.includes(country.code);
     },
     'caribbean': (country) => {
@@ -3864,6 +4336,23 @@ const countryFilters = {
         const opec = ['dz', 'ao', 'cd', 'cg', 'ec', 'gq', 'ga', 'ir', 'iq', 'kw', 'ly', 'ng', 'sa', 'ae', 've'];
         return opec.includes(country.code);
     },
+    asean: (country) => {
+        const asean = ['bn', 'kh', 'id', 'la', 'my', 'mm', 'ph', 'sg', 'th', 'vn'];
+        return asean.includes(country.code);
+    },
+    'african-union': (country) => {
+        // Major AU members (excluding disputed territories)
+        const au = ['dz', 'ao', 'bj', 'bw', 'bf', 'bi', 'cv', 'cm', 'cf', 'td', 'km', 'cg', 'cd', 'ci', 'dj', 'eg', 'gq', 'er', 'sz', 'et', 'ga', 'gm', 'gh', 'gn', 'gw', 'ke', 'ls', 'lr', 'ly', 'mg', 'mw', 'ml', 'mr', 'mu', 'ma', 'mz', 'na', 'ne', 'ng', 'rw', 'st', 'sn', 'sc', 'sl', 'so', 'za', 'ss', 'sd', 'tz', 'tg', 'tn', 'ug', 'zm', 'zw'];
+        return au.includes(country.code);
+    },
+    mercosur: (country) => {
+        const mercosur = ['ar', 'br', 'py', 'uy', 've'];
+        return mercosur.includes(country.code);
+    },
+    'pacific-islands': (country) => {
+        const pacific = ['fj', 'pg', 'sb', 'vu', 'nc', 'pf', 'ws', 'to', 'ki', 'tv', 'nr', 'pw', 'fm', 'mh', 'ck', 'nu', 'tk', 'pn'];
+        return pacific.includes(country.code);
+    },
     
     // Cultural & Historical
     'latin-america': (country) => {
@@ -3882,30 +4371,258 @@ const countryFilters = {
         const nordic = ['dk', 'fi', 'is', 'no', 'se'];
         return nordic.includes(country.code);
     },
+    'commonwealth-realms': (country) => {
+        const commonwealthRealms = ['ag', 'au', 'bs', 'bb', 'bz', 'ca', 'dm', 'fj', 'gd', 'jm', 'ki', 'kn', 'lc', 'nz', 'pg', 'ws', 'sb', 'sc', 'sl', 'tv', 'vc', 'gb'];
+        return commonwealthRealms.includes(country.code);
+    },
+    maghreb: (country) => {
+        const maghreb = ['dz', 'ly', 'ma', 'tn', 'eh'];
+        return maghreb.includes(country.code);
+    },
+    sahel: (country) => {
+        const sahel = ['td', 'ml', 'mr', 'ne', 'sn', 'bf', 'ng', 'cm', 'sd'];
+        return sahel.includes(country.code);
+    },
+    'iberian-peninsula': (country) => {
+        const iberian = ['es', 'pt', 'ad', 'gb']; // Including Gibraltar
+        return iberian.includes(country.code);
+    },
+    'british-isles': (country) => {
+        const britishIsles = ['gb', 'ie', 'im', 'je', 'gg'];
+        return britishIsles.includes(country.code);
+    },
+    'low-countries': (country) => {
+        const lowCountries = ['be', 'nl', 'lu'];
+        return lowCountries.includes(country.code);
+    },
+    'slavic-countries': (country) => {
+        const slavic = ['by', 'bg', 'ba', 'hr', 'cz', 'me', 'mk', 'pl', 'rs', 'ru', 'sk', 'si', 'ua', 'xk'];
+        return slavic.includes(country.code);
+    },
+    'romance-countries': (country) => {
+        const romance = ['ad', 'ar', 'bo', 'br', 'cl', 'co', 'cr', 'cu', 'do', 'ec', 'sv', 'fr', 'gf', 'gt', 'hn', 'it', 'mx', 'mc', 'ni', 'pa', 'py', 'pe', 'pt', 'pr', 'ro', 'sm', 'es', 'uy', 'va', 've'];
+        return romance.includes(country.code);
+    },
+    'germanic-countries': (country) => {
+        const germanic = ['at', 'be', 'dk', 'de', 'is', 'li', 'lu', 'nl', 'no', 'se', 'ch', 'gb'];
+        return germanic.includes(country.code);
+    },
+    'celtic-nations': (country) => {
+        const celtic = ['ie', 'gb', 'fr']; // Ireland, Scotland/Wales/Cornwall (GB), Brittany (FR)
+        return celtic.includes(country.code);
+    },
+    'orthodox-countries': (country) => {
+        const orthodox = ['am', 'bg', 'by', 'cy', 'ee', 'eg', 'et', 'ge', 'gr', 'kz', 'kg', 'mk', 'md', 'me', 'ro', 'rs', 'ru', 'ua'];
+        return orthodox.includes(country.code);
+    },
+    'catholic-countries': (country) => {
+        const catholic = ['ad', 'ag', 'ar', 'at', 'be', 'bo', 'br', 'bz', 'cl', 'co', 'cr', 'cu', 'do', 'ec', 'sv', 'fr', 'gt', 'hn', 'hr', 'hu', 'ie', 'it', 'li', 'lt', 'lu', 'mx', 'mc', 'ni', 'pa', 'py', 'pe', 'ph', 'pl', 'pt', 'pr', 'sm', 'es', 'uy', 'va', 've'];
+        return catholic.includes(country.code);
+    },
+    'muslim-majority': (country) => {
+        const muslimMajority = ['af', 'dz', 'al', 'az', 'bh', 'bd', 'bn', 'bf', 'bi', 'cm', 'td', 'km', 'dj', 'eg', 'gq', 'er', 'gm', 'gn', 'id', 'ir', 'iq', 'jo', 'kz', 'kw', 'kg', 'lb', 'ly', 'my', 'mv', 'ml', 'mr', 'ma', 'ne', 'ng', 'om', 'pk', 'ps', 'qa', 'sa', 'sn', 'so', 'sd', 'sy', 'tj', 'tn', 'tr', 'tm', 'ae', 'uz', 'ye'];
+        return muslimMajority.includes(country.code);
+    },
+    'buddhist-majority': (country) => {
+        const buddhistMajority = ['bt', 'kh', 'la', 'mm', 'np', 'lk', 'th'];
+        return buddhistMajority.includes(country.code);
+    },
+    'hindu-majority': (country) => {
+        const hinduMajority = ['in', 'np', 'mu'];
+        return hinduMajority.includes(country.code);
+    },
+    'pacific-alliance': (country) => {
+        const pacificAlliance = ['cl', 'co', 'mx', 'pe'];
+        return pacificAlliance.includes(country.code);
+    },
+    'andean-community': (country) => {
+        const andeanCommunity = ['bo', 'co', 'ec', 'pe'];
+        return andeanCommunity.includes(country.code);
+    },
+    'organization-turkic-states': (country) => {
+        const turkicStates = ['az', 'kz', 'kg', 'tr', 'uz', 'tm'];
+        return turkicStates.includes(country.code);
+    },
+    'sica': (country) => {
+        const sica = ['bz', 'cr', 'sv', 'gt', 'hn', 'ni', 'pa', 'do'];
+        return sica.includes(country.code);
+    },
+    francophone: (country) => {
+        const francophone = ['be', 'bf', 'bi', 'bj', 'cd', 'cf', 'cg', 'ci', 'cm', 'dj', 'fr', 'ga', 'gn', 'gq', 'ht', 'km', 'lu', 'mg', 'ml', 'mr', 'mu', 'nc', 'ne', 'pf', 'rw', 'sc', 'sn', 'td', 'tg', 'vu', 'ch'];
+        return francophone.includes(country.code);
+    },
+    anglophone: (country) => {
+        const anglophone = ['ag', 'au', 'bs', 'bb', 'bz', 'bw', 'cm', 'ca', 'dm', 'fj', 'gh', 'gd', 'gy', 'ie', 'jm', 'ke', 'ki', 'lr', 'ls', 'mw', 'mt', 'mu', 'fm', 'na', 'nz', 'ng', 'pk', 'pg', 'ph', 'rw', 'kn', 'lc', 'ws', 'sc', 'sg', 'sl', 'sb', 'za', 'lk', 'sz', 'tz', 'to', 'tt', 'tv', 'ug', 'gb', 'us', 'vu', 'zm', 'zw'];
+        return anglophone.includes(country.code);
+    },
+    lusophone: (country) => {
+        const lusophone = ['ao', 'br', 'cv', 'gw', 'mo', 'mz', 'pt', 'st', 'tl'];
+        return lusophone.includes(country.code);
+    },
+    'spanish-speaking': (country) => {
+        const spanishSpeaking = ['ar', 'bo', 'cl', 'co', 'cr', 'cu', 'do', 'ec', 'sv', 'gq', 'gt', 'hn', 'mx', 'ni', 'pa', 'py', 'pe', 'pr', 'uy', 've', 'es'];
+        return spanishSpeaking.includes(country.code);
+    },
+    'arabic-speaking': (country) => {
+        const arabicSpeaking = ['dz', 'bh', 'km', 'dj', 'eg', 'iq', 'jo', 'kw', 'lb', 'ly', 'mr', 'ma', 'om', 'ps', 'qa', 'sa', 'so', 'sd', 'sy', 'tn', 'ae', 'ye', 'er', 'il'];
+        return arabicSpeaking.includes(country.code);
+    },
+    'german-speaking': (country) => {
+        const germanSpeaking = ['de', 'at', 'ch', 'li', 'be', 'lu'];
+        return germanSpeaking.includes(country.code);
+    },
+    'italian-speaking': (country) => {
+        const italianSpeaking = ['it', 'sm', 'va', 'ch'];
+        return italianSpeaking.includes(country.code);
+    },
+    'russian-speaking': (country) => {
+        const russianSpeaking = ['ru', 'by', 'kz', 'kg', 'tj', 'tm', 'uz', 'am', 'az', 'ge', 'md', 'ua'];
+        return russianSpeaking.includes(country.code);
+    },
+    'chinese-speaking': (country) => {
+        const chineseSpeaking = ['cn', 'tw', 'hk', 'mo', 'sg'];
+        return chineseSpeaking.includes(country.code);
+    },
+    'dutch-speaking': (country) => {
+        const dutchSpeaking = ['nl', 'be', 'sr', 'aw', 'cw', 'sx', 'bq'];
+        return dutchSpeaking.includes(country.code);
+    },
+    'turkish-speaking': (country) => {
+        const turkishSpeaking = ['tr', 'cy'];
+        return turkishSpeaking.includes(country.code);
+    },
+    'persian-speaking': (country) => {
+        const persianSpeaking = ['ir', 'af', 'tj'];
+        return persianSpeaking.includes(country.code);
+    },
+    'malay-speaking': (country) => {
+        const malaySpeaking = ['my', 'bn', 'id', 'sg'];
+        return malaySpeaking.includes(country.code);
+    },
+    'swahili-speaking': (country) => {
+        const swahiliSpeaking = ['tz', 'ke', 'ug', 'rw', 'bi', 'cd', 'km'];
+        return swahiliSpeaking.includes(country.code);
+    },
+    'hindi-speaking': (country) => {
+        const hindiSpeaking = ['in', 'np', 'pk', 'bd', 'mu', 'fj'];
+        return hindiSpeaking.includes(country.code);
+    },
+    'korean-speaking': (country) => {
+        const koreanSpeaking = ['kp', 'kr'];
+        return koreanSpeaking.includes(country.code);
+    },
+    'greek-speaking': (country) => {
+        const greekSpeaking = ['gr', 'cy'];
+        return greekSpeaking.includes(country.code);
+    },
+    'romanian-speaking': (country) => {
+        const romanianSpeaking = ['ro', 'md'];
+        return romanianSpeaking.includes(country.code);
+    },
+    'czech-speaking': (country) => {
+        const czechSpeaking = ['cz', 'sk'];
+        return czechSpeaking.includes(country.code);
+    },
+    'serbian-speaking': (country) => {
+        const serbianSpeaking = ['rs', 'ba', 'me', 'xk', 'hr', 'si', 'mk'];
+        return serbianSpeaking.includes(country.code);
+    },
+    'albanian-speaking': (country) => {
+        const albanianSpeaking = ['al', 'xk', 'mk', 'me'];
+        return albanianSpeaking.includes(country.code);
+    },
     
     all: () => true
 };
 
-// Apply filter to countries
-function applyFilter(filterType) {
-    if (!countryFilters[filterType]) {
-        console.error('Unknown filter type:', filterType);
-        return;
+// Apply filter to countries (supports multiple filters combined with OR logic, and subtraction)
+function applyFilter(filterTypes, subtractTypes = []) {
+    // Ensure filterTypes is an array
+    if (!Array.isArray(filterTypes)) {
+        filterTypes = [filterTypes];
+    }
+    if (!Array.isArray(subtractTypes)) {
+        subtractTypes = [];
     }
     
-    const filter = countryFilters[filterType];
-    gameState.filteredCountries = gameState.allCountries.filter(filter);
-    gameState.currentFilter = filterType;
+    // Start with base pool
+    let basePool = [];
+    
+    // If no filters selected or only 'all', start with all countries
+    if (filterTypes.length === 0 || (filterTypes.length === 1 && filterTypes[0] === 'all')) {
+        basePool = [...gameState.allCountries];
+    } else {
+        // Remove 'all' if other filters are selected (all is exclusive)
+        const activeFilters = filterTypes.filter(f => f !== 'all');
+        
+        if (activeFilters.length === 0) {
+            basePool = [...gameState.allCountries];
+        } else {
+            // Combine multiple filters with OR logic (country matches any selected filter)
+            const combinedFilter = (country) => {
+                return activeFilters.some(filterType => {
+                    const filter = countryFilters[filterType];
+                    return filter && filter(country);
+                });
+            };
+            
+            basePool = gameState.allCountries.filter(combinedFilter);
+        }
+    }
+    
+    // Apply subtraction filters (exclude countries matching subtract filters)
+    if (subtractTypes.length > 0) {
+        const subtractFilter = (country) => {
+            return !subtractTypes.some(filterType => {
+                const filter = countryFilters[filterType];
+                return filter && filter(country);
+            });
+        };
+        
+        gameState.filteredCountries = basePool.filter(subtractFilter);
+    } else {
+        gameState.filteredCountries = basePool;
+    }
+    
+    // Debug: Log filter application
+    console.log('Filter applied:', filterTypes);
+    console.log('Filtered countries count:', gameState.filteredCountries.length);
+    console.log('Filtered countries:', gameState.filteredCountries.map(c => c.name).slice(0, 10));
+    
+    // Store current filter as comma-separated string for compatibility
+    // Format: "add1,add2|subtract1,subtract2" or just "all" or "add1,add2"
+    if (filterTypes.length === 0 || (filterTypes.length === 1 && filterTypes[0] === 'all')) {
+        if (subtractTypes.length > 0) {
+            gameState.currentFilter = `all|${subtractTypes.join(',')}`;
+        } else {
+            gameState.currentFilter = 'all';
+        }
+    } else {
+        const activeFilters = filterTypes.filter(f => f !== 'all');
+        if (subtractTypes.length > 0) {
+            gameState.currentFilter = `${activeFilters.join(',')}|${subtractTypes.join(',')}`;
+        } else {
+            gameState.currentFilter = activeFilters.join(',');
+        }
+    }
     
     // Track filter usage for Explorer achievement
-    if (!gameStatistics.filtersUsed[filterType]) {
-        gameStatistics.filtersUsed[filterType] = true;
-        achievements.progress.explorer.add(filterType);
-        saveStatistics();
-        saveAchievements();
-    }
+    filterTypes.forEach(filterType => {
+        if (filterType !== 'all' && !gameStatistics.filtersUsed[filterType]) {
+            gameStatistics.filtersUsed[filterType] = true;
+            achievements.progress.explorer.add(filterType);
+        }
+    });
+    subtractTypes.forEach(filterType => {
+        if (!gameStatistics.filtersUsed[filterType]) {
+            gameStatistics.filtersUsed[filterType] = true;
+            achievements.progress.explorer.add(filterType);
+        }
+    });
+    saveStatistics();
+    saveAchievements();
     
-    // Update filter label
+    // Update filter label to show multiple selections and subtractions
     const filterLabels = {
         'all': 'All Countries',
         'africa': 'Africa',
@@ -3916,15 +4633,27 @@ function applyFilter(filterType) {
         'middle-east': 'Middle East',
         'southeast-asia': 'Southeast Asia',
         'central-asia': 'Central Asia',
+        'east-asia': 'East Asia',
+        'south-asia': 'South Asia',
+        'west-asia': 'West Asia',
         'balkans': 'Balkans',
         'scandinavia': 'Scandinavia',
         'baltic': 'Baltic States',
+        'benelux': 'Benelux',
+        'visegrad': 'Visegrad Group',
+        'mediterranean': 'Mediterranean',
         'caribbean': 'Caribbean',
         'central-america': 'Central America',
+        'north-america': 'North America',
         'south-america': 'South America',
+        'andean': 'Andean Countries',
+        'north-africa': 'North Africa',
         'west-africa': 'West Africa',
+        'central-africa': 'Central Africa',
         'east-africa': 'East Africa',
+        'horn-of-africa': 'Horn of Africa',
         'southern-africa': 'Southern Africa',
+        'pacific-islands': 'Pacific Islands',
         'large': 'Large Countries',
         'medium': 'Medium Countries',
         'small': 'Small Countries',
@@ -3937,56 +4666,300 @@ function applyFilter(filterType) {
         'brics': 'BRICS',
         'commonwealth': 'Commonwealth',
         'opec': 'OPEC',
+        'asean': 'ASEAN',
+        'african-union': 'African Union',
+        'mercosur': 'Mercosur',
         'latin-america': 'Latin America',
         'former-soviet': 'Former Soviet Union',
         'arab-league': 'Arab League',
-        'nordic': 'Nordic Countries'
+        'nordic': 'Nordic Countries',
+        'francophone': 'Francophone',
+        'anglophone': 'Anglophone',
+        'lusophone': 'Lusophone',
+        'spanish-speaking': 'Spanish-Speaking',
+        'arabic-speaking': 'Arabic-Speaking',
+        'german-speaking': 'German-Speaking',
+        'italian-speaking': 'Italian-Speaking',
+        'russian-speaking': 'Russian-Speaking',
+        'chinese-speaking': 'Chinese-Speaking',
+        'dutch-speaking': 'Dutch-Speaking',
+        'turkish-speaking': 'Turkish-Speaking',
+        'persian-speaking': 'Persian-Speaking',
+        'malay-speaking': 'Malay-Speaking',
+        'swahili-speaking': 'Swahili-Speaking',
+        'hindi-speaking': 'Hindi-Speaking',
+        'korean-speaking': 'Korean-Speaking',
+        'greek-speaking': 'Greek-Speaking',
+        'romanian-speaking': 'Romanian-Speaking',
+        'czech-speaking': 'Czech-Speaking',
+        'serbian-speaking': 'Serbian-Speaking',
+        'albanian-speaking': 'Albanian-Speaking',
+        'commonwealth-realms': 'Commonwealth Realms',
+        'maghreb': 'Maghreb',
+        'sahel': 'Sahel',
+        'iberian-peninsula': 'Iberian Peninsula',
+        'british-isles': 'British Isles',
+        'low-countries': 'Low Countries',
+        'slavic-countries': 'Slavic Countries',
+        'romance-countries': 'Romance Countries',
+        'germanic-countries': 'Germanic Countries',
+        'celtic-nations': 'Celtic Nations',
+        'orthodox-countries': 'Orthodox Countries',
+        'catholic-countries': 'Catholic Countries',
+        'muslim-majority': 'Muslim-Majority',
+        'buddhist-majority': 'Buddhist-Majority',
+        'hindu-majority': 'Hindu-Majority',
+        'pacific-alliance': 'Pacific Alliance',
+        'andean-community': 'Andean Community',
+        'organization-turkic-states': 'Turkic States',
+        'sica': 'SICA'
     };
     
-    filterLabel.textContent = filterLabels[filterType] || 'Custom Filter';
+    // Build label from selected filters
+    const activeFilters = filterTypes.filter(f => f !== 'all');
+    let labelParts = [];
+    
+    if (activeFilters.length === 0) {
+        labelParts.push('All Countries');
+    } else if (activeFilters.length === 1) {
+        labelParts.push(filterLabels[activeFilters[0]] || activeFilters[0]);
+    } else if (activeFilters.length <= 3) {
+        labelParts.push(activeFilters.map(f => filterLabels[f] || f).join(' + '));
+    } else {
+        labelParts.push(`${activeFilters.length} Filters`);
+    }
+    
+    // Add subtract filters to label
+    if (subtractTypes.length > 0) {
+        if (subtractTypes.length === 1) {
+            labelParts.push(`- ${filterLabels[subtractTypes[0]] || subtractTypes[0]}`);
+        } else if (subtractTypes.length <= 2) {
+            labelParts.push(`- ${subtractTypes.map(f => filterLabels[f] || f).join(', ')}`);
+        } else {
+            labelParts.push(`- ${subtractTypes.length} Excluded`);
+        }
+    }
+    
+    filterLabel.textContent = labelParts.join(' ');
+    
     updateFilterCount();
 }
 
-// Update filter count display
+// Update filter count display (works with multiple filters and subtraction)
 function updateFilterCount() {
     if (!filterCount) return;
-    const filter = countryFilters[selectedFilterType];
-    if (!filter) return;
-    const previewCount = gameState.allCountries.filter(filter).length;
+    
+    // Calculate preview count based on current filter states
+    let basePool = [];
+    
+    // Determine base pool from add filters
+    const addFilters = Object.keys(filterStates).filter(f => filterStates[f] === 'add');
+    const hasAll = selectedFilters.includes('all') && addFilters.length === 0;
+    
+    if (hasAll || addFilters.length === 0) {
+        basePool = [...gameState.allCountries];
+    } else {
+        const combinedFilter = (country) => {
+            return addFilters.some(filterType => {
+                const filter = countryFilters[filterType];
+                return filter && filter(country);
+            });
+        };
+        basePool = gameState.allCountries.filter(combinedFilter);
+    }
+    
+    // Apply subtract filters
+    const subtractFilters = Object.keys(filterStates).filter(f => filterStates[f] === 'subtract');
+    if (subtractFilters.length > 0) {
+        const subtractFilter = (country) => {
+            return !subtractFilters.some(filterType => {
+                const filter = countryFilters[filterType];
+                return filter && filter(country);
+            });
+        };
+        basePool = basePool.filter(subtractFilter);
+    }
+    
+    const previewCount = basePool.length;
     filterCount.textContent = `${previewCount} ${previewCount === 1 ? 'country' : 'countries'} available`;
 }
 
 // Initialize filter system
+let filterSystemInitialized = false;
+
 function initializeFilterSystem() {
+    // Prevent multiple initializations
+    if (filterSystemInitialized) {
+        return;
+    }
+    filterSystemInitialized = true;
+    
+    // Initialize selectedFilters and filterStates from current filter state
+    function syncSelectedFiltersFromCurrent() {
+        // Reset states
+        selectedFilters = ['all'];
+        subtractFilters = [];
+        filterStates = {};
+        
+        if (gameState.currentFilter && gameState.currentFilter !== 'all') {
+            // Check if filter contains subtraction (format: "add1,add2|subtract1,subtract2")
+            if (gameState.currentFilter.includes('|')) {
+                const [addPart, subtractPart] = gameState.currentFilter.split('|');
+                if (addPart && addPart !== 'all') {
+                    selectedFilters = addPart.split(',');
+                    selectedFilters.forEach(f => {
+                        filterStates[f] = 'add';
+                    });
+                } else {
+                    selectedFilters = ['all'];
+                }
+                if (subtractPart) {
+                    subtractFilters = subtractPart.split(',');
+                    subtractFilters.forEach(f => {
+                        filterStates[f] = 'subtract';
+                    });
+                }
+            } else {
+                // No subtraction, just add filters
+                if (gameState.currentFilter.includes(',')) {
+                    selectedFilters = gameState.currentFilter.split(',');
+                } else {
+                    selectedFilters = [gameState.currentFilter];
+                }
+                selectedFilters.forEach(f => {
+                    if (f !== 'all') {
+                        filterStates[f] = 'add';
+                    }
+                });
+            }
+        }
+    }
+    
+    // Initialize on load
+    syncSelectedFiltersFromCurrent();
+    
     // Set up filter button click
     filterButton.addEventListener('click', () => {
+        // Sync selectedFilters from current filter state before opening modal
+        syncSelectedFiltersFromCurrent();
+        
         filterModal.classList.remove('hidden');
-        updateFilterCount();
-        // Highlight current filter
-        filterOptions.forEach(btn => {
-            if (btn.dataset.filter === gameState.currentFilter) {
+        
+        // Highlight currently selected filters (re-query to get fresh elements)
+        const currentFilterOptions = document.querySelectorAll('.filter-option');
+        currentFilterOptions.forEach(btn => {
+            const filterType = btn.dataset.filter;
+            btn.classList.remove('active', 'subtract');
+            
+            if (filterType === 'all' && selectedFilters.includes('all') && Object.keys(filterStates).length === 0) {
                 btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
+            } else if (filterStates[filterType] === 'add') {
+                btn.classList.add('active');
+            } else if (filterStates[filterType] === 'subtract') {
+                btn.classList.add('active', 'subtract');
             }
         });
+        
+        updateFilterCount();
     });
     
-    // Set up filter option clicks
-    filterOptions.forEach(btn => {
-        btn.addEventListener('click', () => {
-            // Remove active class from all
-            filterOptions.forEach(b => b.classList.remove('active'));
-            // Add active class to clicked
-            btn.classList.add('active');
-            selectedFilterType = btn.dataset.filter;
-            updateFilterCount();
-        });
+    // Set up filter option clicks (three-state toggle: not selected -> add -> subtract -> not selected)
+    // Use event delegation on the modal to handle clicks dynamically
+    filterModal.addEventListener('click', (e) => {
+        const btn = e.target.closest('.filter-option');
+        if (!btn) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const filterType = btn.dataset.filter;
+        
+        // Ensure selectedFilters is an array
+        if (!Array.isArray(selectedFilters)) {
+            selectedFilters = selectedFilters ? [selectedFilters] : ['all'];
+        }
+        
+        // Special handling for 'all' filter
+        if (filterType === 'all') {
+            // If 'all' is clicked, reset everything to 'all'
+            selectedFilters = ['all'];
+            subtractFilters = [];
+            filterStates = {};
+            
+            // Update all button states
+            document.querySelectorAll('.filter-option').forEach(b => {
+                b.classList.remove('active', 'subtract');
+                if (b.dataset.filter === 'all') {
+                    b.classList.add('active');
+                }
+            });
+        } else {
+            // Three-state toggle: not selected -> add -> subtract -> not selected
+            const currentState = filterStates[filterType];
+            
+            if (currentState === null || currentState === undefined) {
+                // First click: Always add mode (include countries)
+                // Remove 'all' if it's selected and we're adding a specific filter
+                if (selectedFilters.includes('all')) {
+                    selectedFilters = selectedFilters.filter(f => f !== 'all');
+                    const allBtn = document.querySelector('.filter-option[data-filter="all"]');
+                    if (allBtn) allBtn.classList.remove('active');
+                }
+                
+                filterStates[filterType] = 'add';
+                if (!selectedFilters.includes(filterType)) {
+                    selectedFilters.push(filterType);
+                }
+                if (subtractFilters.includes(filterType)) {
+                    subtractFilters = subtractFilters.filter(f => f !== filterType);
+                }
+                btn.classList.add('active');
+                btn.classList.remove('subtract');
+            } else if (currentState === 'add') {
+                // Second click: Switch from add to subtract mode
+                filterStates[filterType] = 'subtract';
+                // Remove from add filters, add to subtract filters
+                selectedFilters = selectedFilters.filter(f => f !== filterType);
+                if (!subtractFilters.includes(filterType)) {
+                    subtractFilters.push(filterType);
+                }
+                btn.classList.add('active', 'subtract');
+            } else if (currentState === 'subtract') {
+                // Third click: Remove filter
+                filterStates[filterType] = null;
+                delete filterStates[filterType];
+                selectedFilters = selectedFilters.filter(f => f !== filterType);
+                subtractFilters = subtractFilters.filter(f => f !== filterType);
+                btn.classList.remove('active', 'subtract');
+                
+                // If no filters selected, default to 'all'
+                const hasAddFilters = Object.keys(filterStates).some(f => filterStates[f] === 'add');
+                if (selectedFilters.length === 0 && !hasAddFilters && subtractFilters.length === 0) {
+                    selectedFilters = ['all'];
+                    const allBtn = document.querySelector('.filter-option[data-filter="all"]');
+                    if (allBtn) allBtn.classList.add('active');
+                }
+            }
+        }
+        
+        // Debug log to verify state
+        console.log('Selected filters (add):', selectedFilters);
+        console.log('Subtract filters:', subtractFilters);
+        console.log('Filter states:', filterStates);
+        
+        updateFilterCount();
     });
     
     // Apply filter button
     applyFilterButton.addEventListener('click', () => {
-        applyFilter(selectedFilterType);
+        // Get add and subtract filters from filterStates
+        const addFilters = selectedFilters.filter(f => f !== 'all');
+        const subtractFiltersList = Object.keys(filterStates).filter(f => filterStates[f] === 'subtract');
+        
+        // If 'all' is selected and no add filters, use 'all' as base
+        const finalAddFilters = (selectedFilters.includes('all') && addFilters.length === 0) ? ['all'] : addFilters;
+        
+        applyFilter(finalAddFilters, subtractFiltersList);
         filterModal.classList.add('hidden');
         // Restart game with new filter
         restartGame();
@@ -3996,14 +4969,15 @@ function initializeFilterSystem() {
     closeFilterButton.addEventListener('click', () => {
         filterModal.classList.add('hidden');
         // Reset selection to current filter
-        selectedFilterType = gameState.currentFilter;
+        syncSelectedFiltersFromCurrent();
     });
     
     // Close on Escape key
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !filterModal.classList.contains('hidden')) {
             filterModal.classList.add('hidden');
-            selectedFilterType = gameState.currentFilter;
+            // Reset selection to current filter
+            syncSelectedFiltersFromCurrent();
         }
     });
 }
@@ -4050,6 +5024,22 @@ function applyBorderSettings() {
             mapContainer.classList.add('border-overlay-on');
         } else {
             mapContainer.classList.add('border-overlay-off');
+        }
+        
+        // Update borders overlay layer style
+        updateBordersLayerStyle();
+        
+        // Toggle borders layer visibility
+        if (gameState.map && countryBordersLayer) {
+            if (borderSettings.overlay) {
+                if (!gameState.map.hasLayer(countryBordersLayer)) {
+                    countryBordersLayer.addTo(gameState.map);
+                }
+            } else {
+                if (gameState.map.hasLayer(countryBordersLayer)) {
+                    gameState.map.removeLayer(countryBordersLayer);
+                }
+            }
         }
         
         // Force map to invalidate size and refresh tiles if needed

@@ -547,6 +547,45 @@ body {
     z-index: 1;
     touch-action: pan-x pan-y;
     -webkit-tap-highlight-color: transparent;
+    background: #f5f5f5; /* Subtle background color while tiles load */
+}
+
+/* Enhanced map tile styling for better appearance */
+.map-container .leaflet-tile-container img {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    transition: opacity 0.2s ease;
+}
+
+/* Smooth map appearance */
+.map-container .leaflet-tile-pane {
+    opacity: 1;
+}
+
+/* Enhanced map visual quality */
+.map-container .leaflet-container {
+    background-color: #e8f4f8; /* Soft blue-gray background for water areas */
+    font-family: inherit;
+}
+
+/* Improve tile loading appearance */
+.map-container .leaflet-tile-loaded {
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.map-container .leaflet-tile-loading {
+    opacity: 0.6;
+}
+
+/* Better attribution styling */
+.map-container .leaflet-control-attribution {
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(4px);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Custom Zoom Controls */
@@ -630,21 +669,20 @@ body {
 }
 
 /* Border Visibility Enhancements */
-/* Minimal filters - let the base map show its natural borders */
-/* CSS filters are kept very light to avoid breaking the map display */
+/* Enhanced filters for better border visibility - subtle adjustments */
 .map-container.border-thin .leaflet-tile-container img,
 .map-container.border-thin .leaflet-tile-pane img {
-    filter: contrast(1.05);
+    filter: contrast(1.05) brightness(1.02) saturate(1.05);
 }
 
 .map-container.border-medium .leaflet-tile-container img,
 .map-container.border-medium .leaflet-tile-pane img {
-    filter: contrast(1.08);
+    filter: contrast(1.08) brightness(1.01) saturate(1.08);
 }
 
 .map-container.border-thick .leaflet-tile-container img,
 .map-container.border-thick .leaflet-tile-pane img {
-    filter: contrast(1.1);
+    filter: contrast(1.12) brightness(1.0) saturate(1.1);
 }
 
 /* Combined classes - ensure only one filter is applied at a time */
@@ -995,6 +1033,22 @@ body {
     color: white;
     border-color: #667eea;
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.filter-option.active.subtract {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: white;
+    position: relative;
+}
+
+.filter-option.active.subtract::before {
+    content: '−';
+    position: absolute;
+    top: 0;
+    right: 0.5rem;
+    font-weight: bold;
+    font-size: 1.2rem;
 }
 
 .filter-info {
@@ -1683,6 +1737,12 @@ body.dark-mode .filter-option.active {
     background: #667eea;
     color: #ffffff;
     border-color: #667eea;
+}
+
+body.dark-mode .filter-option.active.subtract {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #ffffff;
 }
 
 body.dark-mode .stat-card {
@@ -3035,6 +3095,35 @@ body.font-large .record-value {
     stroke-width: 3;
     fill: rgba(102, 126, 234, 0.2);
     animation: highlightPulse 1s ease infinite;
+}
+
+/* Country Borders Overlay Layer */
+.country-borders-tile-layer {
+    mix-blend-mode: multiply;
+    pointer-events: none;
+}
+
+/* Enhanced border visibility for GeoJSON borders */
+.leaflet-overlay-pane svg path {
+    vector-effect: non-scaling-stroke;
+}
+
+/* Make borders more prominent */
+.map-container .leaflet-overlay-pane svg path[stroke] {
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+/* Prevent border flickering during updates */
+.map-container .leaflet-overlay-pane canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    will-change: contents;
+}
+
+/* Smooth border rendering */
+.map-container .leaflet-overlay-pane {
+    transition: opacity 0.1s ease;
 }
 
 @keyframes highlightPulse {

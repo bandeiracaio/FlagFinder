@@ -61,12 +61,14 @@ let achievements = {
 };
 
 // Game mode
-let currentGameMode = 'classic'; // 'classic', 'practice', 'daily', 'time', 'endless'
+let currentGameMode = 'classic'; // 'classic', 'practice', 'daily', 'time', 'endless', 'blitz'
 let dailyChallengeCountries = [];
 let dailyChallengeDate = null;
 let currentQuizType = 'map'; // 'map', 'multiple', 'reverse', 'capital'
 let timerInterval = null;
-let timeRemaining = 3;
+let timeRemaining = 4;
+let blitzTimerInterval = null;
+let blitzTimeRemaining = 60;
 let gameHistory = [];
 let customCountrySets = {};
 let editingCustomSetId = null;
@@ -95,7 +97,12 @@ let gameSettings = {
     darkMode: false,
     soundEffects: true,
     music: false,
-    masterVolume: 50
+    masterVolume: 50,
+    hapticFeedback: false,
+    swipeGestures: true,
+    fullscreen: false,
+    landscapeLock: false,
+    headerSpacing: 'default' // 'default', 'compact', 'minimal'
 };
 
 // Sound effects (using Web Audio API for simple tones)
@@ -203,8 +210,20 @@ const customSetCountriesList = document.getElementById('custom-set-countries-lis
 const saveCustomSetButton = document.getElementById('save-custom-set-button');
 const deleteCustomSetButton = document.getElementById('delete-custom-set-button');
 const cancelCustomSetEditorButton = document.getElementById('cancel-custom-set-editor-button');
-const mapStyleButton = document.getElementById('map-style-button');
-const mapStyleLabel = document.getElementById('map-style-label');
+// Map style elements (button removed, now in settings)
+const mapStyleModal = document.getElementById('map-style-modal');
+const mapStyleOptions = document.querySelectorAll('.map-style-option');
+const closeMapStyleButton = document.getElementById('close-map-style-button');
+const leaderboardButton = document.getElementById('leaderboard-button');
+const leaderboardModal = document.getElementById('leaderboard-modal');
+const leaderboardTabs = document.querySelectorAll('.leaderboard-tab');
+const leaderboardContent = document.getElementById('leaderboard-content');
+const closeLeaderboardButton = document.getElementById('close-leaderboard-button');
+const settingsTabs = document.querySelectorAll('.settings-tab');
+const hapticFeedbackToggle = document.getElementById('haptic-feedback-toggle');
+const swipeGesturesToggle = document.getElementById('swipe-gestures-toggle');
+const fullscreenToggle = document.getElementById('fullscreen-toggle');
+const landscapeLockToggle = document.getElementById('landscape-lock-toggle');
 const difficultyButton = document.getElementById('difficulty-button');
 const difficultyLabel = document.getElementById('difficulty-label');
 const difficultyModal = document.getElementById('difficulty-modal');
@@ -296,7 +315,22 @@ function applySettings() {
     
     // Volume
     if (masterVolumeSlider) masterVolumeSlider.value = gameSettings.masterVolume;
+    
+    // Header spacing
+    const gameHeader = document.querySelector('.game-header');
+    if (gameHeader) {
+        gameHeader.classList.remove('header-spacing-default', 'header-spacing-compact', 'header-spacing-minimal');
+        const spacing = gameSettings.headerSpacing || 'default';
+        gameHeader.classList.add(`header-spacing-${spacing}`);
+    }
+    
+    // Update header spacing select if it exists
+    const headerSpacingSelect = document.getElementById('header-spacing');
+    if (headerSpacingSelect) {
+        headerSpacingSelect.value = gameSettings.headerSpacing || 'default';
+    }
 }
+
 
 // ==================== SOUND EFFECTS ====================
 
@@ -705,8 +739,11 @@ function saveCustomSets() {
 // Load map style from localStorage
 function loadMapStyle() {
     const saved = localStorage.getItem('flagfinder-map-style');
-    if (saved) {
+    if (saved && mapStyles[saved]) {
         mapStyle = saved;
+    } else {
+        // Default to political if saved style doesn't exist
+        mapStyle = 'political';
     }
 }
 
@@ -929,15 +966,16 @@ function setGameMode(mode) {
         practice: 'Practice',
         daily: 'Daily',
         time: 'Time Challenge',
-        endless: 'Endless'
+        endless: 'Endless',
+        blitz: 'Blitz'
     };
     if (gameModeLabel) {
         gameModeLabel.textContent = modeLabels[mode] || 'Classic';
     }
     
-    // Show/hide timer for time challenge mode
+    // Show/hide timer for time challenge and blitz modes
     if (timerStatItem) {
-        timerStatItem.classList.toggle('hidden', mode !== 'time');
+        timerStatItem.classList.toggle('hidden', mode !== 'time' && mode !== 'blitz');
     }
     
     // Save mode preference
@@ -1216,8 +1254,10 @@ function initializeDataSystems() {
     // Check system preference for dark mode
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches && !localStorage.getItem('flagfinder-settings')) {
         gameSettings.darkMode = true;
-        applySettings();
     }
+    
+    // Apply all settings (including header spacing)
+    applySettings();
     
     // Load game mode preference
     if (gameSettings.gameMode) {
@@ -1235,9 +1275,7 @@ function initializeDataSystems() {
     }
     
     // Apply map style
-    if (mapStyle === 'satellite' && mapStyleLabel) {
-        mapStyleLabel.textContent = 'Satellite';
-    }
+    // Map style label removed (now in settings)
     
     // Apply difficulty
     if (currentDifficulty !== 'all') {
@@ -1296,6 +1334,17 @@ function initializeSettings() {
     if (masterVolumeSlider) {
         masterVolumeSlider.addEventListener('input', (e) => {
             gameSettings.masterVolume = parseInt(e.target.value);
+            saveSettings();
+        });
+    }
+    
+    // Header spacing
+    const headerSpacingSelect = document.getElementById('header-spacing');
+    if (headerSpacingSelect) {
+        headerSpacingSelect.value = gameSettings.headerSpacing || 'default';
+        headerSpacingSelect.addEventListener('change', (e) => {
+            gameSettings.headerSpacing = e.target.value;
+            applySettings();
             saveSettings();
         });
     }
@@ -1500,7 +1549,7 @@ function initializeDailyChallenge() {
 function startTimer() {
     if (currentGameMode !== 'time') return;
     
-    timeRemaining = 3;
+    timeRemaining = 4;
     if (timerElement) {
         timerElement.textContent = `${timeRemaining}s`;
         timerElement.classList.remove('warning');
@@ -1544,13 +1593,21 @@ function stopTimer() {
 function handleTimeUp() {
     stopTimer();
     gameState.isWaitingForClick = false;
+    
+    // Safety check for currentCountry
+    if (!gameState.currentCountry || !gameState.currentCountry.latlng || !Array.isArray(gameState.currentCountry.latlng) || gameState.currentCountry.latlng.length < 2) {
+        console.error('handleTimeUp: currentCountry or latlng is invalid');
+        nextRound();
+        return;
+    }
+    
     const distance = calculateDistance(
         gameState.currentCountry.latlng[0],
         gameState.currentCountry.latlng[1],
         gameState.currentCountry.latlng[0],
         gameState.currentCountry.latlng[1]
     );
-    showFeedback(false, distance, gameState.currentCountry.name);
+    showFeedback(false, distance, gameState.currentCountry.name || 'Unknown');
     gameState.score = Math.max(0, gameState.score - 5); // Penalty for time up
     gameState.incorrectAnswers++;
     gameState.streak = 0;
@@ -1565,6 +1622,81 @@ function handleTimeUp() {
     }, 2000);
 }
 
+// ==================== BLITZ MODE ====================
+
+// Start blitz timer (60 seconds)
+function startBlitzTimer() {
+    if (currentGameMode !== 'blitz') return;
+    
+    blitzTimeRemaining = 60;
+    if (timerElement) {
+        timerElement.textContent = `${blitzTimeRemaining}s`;
+        timerElement.classList.remove('warning');
+    }
+    
+    if (blitzTimerInterval) {
+        clearInterval(blitzTimerInterval);
+    }
+    
+    blitzTimerInterval = setInterval(() => {
+        blitzTimeRemaining--;
+        if (timerElement) {
+            timerElement.textContent = `${blitzTimeRemaining}s`;
+            if (blitzTimeRemaining <= 10) {
+                timerElement.classList.add('warning');
+            } else {
+                timerElement.classList.remove('warning');
+            }
+        }
+        
+        if (blitzTimeRemaining <= 0) {
+            clearInterval(blitzTimerInterval);
+            blitzTimerInterval = null;
+            // Time's up - end blitz game
+            endBlitzGame();
+        }
+    }, 1000);
+}
+
+// Stop blitz timer
+function stopBlitzTimer() {
+    if (blitzTimerInterval) {
+        clearInterval(blitzTimerInterval);
+        blitzTimerInterval = null;
+    }
+}
+
+// End blitz game
+function endBlitzGame() {
+    stopBlitzTimer();
+    gameState.isWaitingForClick = false;
+    
+    // Show final score
+    const finalScore = gameState.score;
+    const flagsGuessed = gameState.correctAnswers + gameState.incorrectAnswers;
+    const accuracy = flagsGuessed > 0 ? Math.round((gameState.correctAnswers / flagsGuessed) * 100) : 0;
+    
+    showFeedback(true, `Blitz Complete!`, `Score: ${finalScore} | Flags: ${flagsGuessed} | Accuracy: ${accuracy}%`);
+    
+    // Update statistics
+    updateStatistics();
+    checkAchievements();
+    addGameToHistory();
+    
+    // Update leaderboard
+    updateLeaderboard('blitz', {
+        score: finalScore,
+        flags: flagsGuessed,
+        accuracy: accuracy,
+        date: new Date().toISOString()
+    });
+    
+    // Show game over modal after a delay
+    setTimeout(() => {
+        showGameOverModal();
+    }, 2000);
+}
+
 // ==================== ENDLESS MODE ====================
 
 // Check if game should continue in endless mode
@@ -1574,7 +1706,144 @@ function shouldContinueEndless() {
 
 // ==================== COUNTRY INFORMATION CARDS ====================
 
-// Show country information card
+// Show country info card after each round (integrated into flag container)
+function showCountryInfoCard(country, isCorrect, distance) {
+    // Get the integrated country info card element
+    const infoCard = document.getElementById('country-info-card-integrated');
+    if (!infoCard) return;
+    
+    // Get country data
+    const capital = country.capital && country.capital[0] ? country.capital[0] : 'N/A';
+    const population = country.population ? formatNumber(country.population) : 'N/A';
+    const area = country.area ? `${formatNumber(Math.round(country.area))} km²` : 'N/A';
+    const region = country.region || 'N/A';
+    
+    // Build card HTML
+    infoCard.innerHTML = `
+        <div class="info-card-integrated-content">
+            <div class="info-card-integrated-header">
+                <span class="info-card-status ${isCorrect ? 'correct' : 'incorrect'}">${isCorrect ? '✓' : '✗'}</span>
+                <h4>${country.name}</h4>
+            </div>
+            <div class="info-card-integrated-body">
+                <div class="info-card-row-compact">
+                    <span class="info-label">Capital:</span>
+                    <span class="info-value">${capital}</span>
+                </div>
+                <div class="info-card-row-compact">
+                    <span class="info-label">Population:</span>
+                    <span class="info-value">${population}</span>
+                </div>
+                <div class="info-card-row-compact">
+                    <span class="info-label">Area:</span>
+                    <span class="info-value">${area}</span>
+                </div>
+                <div class="info-card-row-compact">
+                    <span class="info-label">Region:</span>
+                    <span class="info-value">${region}</span>
+                </div>
+                ${distance !== undefined ? `
+                <div class="info-card-row-compact">
+                    <span class="info-label">Distance:</span>
+                    <span class="info-value ${isCorrect ? 'correct' : 'incorrect'}">${formatDistance(distance)}</span>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    
+    // Show card with animation
+    infoCard.classList.remove('hidden');
+    
+    // Auto-hide after delay (shorter for blitz mode)
+    const hideDelay = currentGameMode === 'blitz' ? 1200 : 3000;
+    setTimeout(() => {
+        if (infoCard && !infoCard.classList.contains('hidden')) {
+            infoCard.classList.add('hidden');
+        }
+    }, hideDelay);
+}
+
+// ==================== LEADERBOARD SYSTEM ====================
+
+// Leaderboard data structure
+let leaderboards = {
+    blitz: [], // { score, flags, accuracy, date, playerName }
+    classic: [], // { score, accuracy, date, playerName }
+    daily: [], // { score, accuracy, date, playerName }
+    time: [] // { score, accuracy, date, playerName }
+};
+
+// Load leaderboards from localStorage
+function loadLeaderboards() {
+    try {
+        const saved = localStorage.getItem('flagfinder-leaderboards');
+        if (saved) {
+            leaderboards = JSON.parse(saved);
+            // Convert date strings back to Date objects if needed
+            Object.keys(leaderboards).forEach(mode => {
+                if (Array.isArray(leaderboards[mode])) {
+                    leaderboards[mode] = leaderboards[mode].map(entry => ({
+                        ...entry,
+                        date: new Date(entry.date)
+                    }));
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Error loading leaderboards:', e);
+        leaderboards = {
+            blitz: [],
+            classic: [],
+            daily: [],
+            time: []
+        };
+    }
+}
+
+// Save leaderboards to localStorage
+function saveLeaderboards() {
+    try {
+        localStorage.setItem('flagfinder-leaderboards', JSON.stringify(leaderboards));
+    } catch (e) {
+        console.error('Error saving leaderboards:', e);
+    }
+}
+
+// Update leaderboard for a game mode
+function updateLeaderboard(mode, entry) {
+    if (!leaderboards[mode]) {
+        leaderboards[mode] = [];
+    }
+    
+    // Get player name (use stored name or default)
+    const playerName = localStorage.getItem('flagfinder-player-name') || 'Player';
+    
+    // Add entry
+    leaderboards[mode].push({
+        ...entry,
+        playerName: playerName,
+        date: new Date()
+    });
+    
+    // Sort by score (descending)
+    leaderboards[mode].sort((a, b) => b.score - a.score);
+    
+    // Keep only top 100 entries
+    leaderboards[mode] = leaderboards[mode].slice(0, 100);
+    
+    saveLeaderboards();
+}
+
+// Get top scores for a mode
+function getTopScores(mode, limit = 10) {
+    if (!leaderboards[mode]) {
+        return [];
+    }
+    return leaderboards[mode].slice(0, limit);
+}
+
+// Show country information card (detailed modal)
 async function showCountryInfo(country) {
     if (!countryInfoModal || !countryInfoContent) return;
     
@@ -2264,13 +2533,48 @@ async function loadCountryBordersGeoJSON() {
 
 // ==================== MAP STYLE TOGGLE ====================
 
-// Toggle map style
-function toggleMapStyle() {
-    mapStyle = mapStyle === 'political' ? 'satellite' : 'political';
-    
-    if (mapStyleLabel) {
-        mapStyleLabel.textContent = mapStyle === 'satellite' ? 'Satellite' : 'Political';
+// Map style definitions
+const mapStyles = {
+    political: {
+        name: 'Political',
+        icon: '🗺️',
+        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        needsBorders: true
+    },
+    dark: {
+        name: 'Dark',
+        icon: '🌙',
+        url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        needsBorders: true
+    },
+    satellite: {
+        name: 'Satellite',
+        icon: '🛰️',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attribution: '&copy; Esri',
+        needsBorders: false
     }
+};
+
+// Set map style
+function setMapStyle(style) {
+    // If style doesn't exist, default to political
+    if (!mapStyles[style]) {
+        style = 'political';
+    }
+    
+    mapStyle = style;
+    
+    // Update inline map style options active state
+    const inlineMapStyleOptions = document.querySelectorAll('.map-style-option-inline');
+    inlineMapStyleOptions.forEach(opt => {
+        opt.classList.remove('active');
+        if (opt.dataset.style === style) {
+            opt.classList.add('active');
+        }
+    });
     
     saveMapStyle();
     
@@ -2278,34 +2582,56 @@ function toggleMapStyle() {
     if (gameState.map && gameState.mapTileLayer) {
         gameState.map.removeLayer(gameState.mapTileLayer);
         
-        if (mapStyle === 'satellite') {
-            gameState.mapTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: '&copy; Esri',
-                maxZoom: 19
-            });
-            // Remove borders overlay on satellite view (not needed)
-            if (countryBordersLayer) {
-                gameState.map.removeLayer(countryBordersLayer);
+        const styleConfig = mapStyles[style];
+        gameState.mapTileLayer = L.tileLayer(styleConfig.url, {
+            attribution: styleConfig.attribution,
+            maxZoom: style === 'satellite' ? 19 : 20,
+            subdomains: style === 'watercolor' ? 'abcd' : 'abcd',
+            tileSize: 256,
+            zoomOffset: 0,
+            errorTileUrl: '', // Prevent broken tile images
+            crossOrigin: true,
+            retry: 3,
+            timeout: 10000
+        });
+        
+        // Handle tile loading errors - retry failed tiles
+        gameState.mapTileLayer.on('tileerror', function(error, tile) {
+            console.warn('Tile loading error:', error, tile);
+            // Retry loading the tile
+            if (tile && tile.el) {
+                const img = tile.el;
+                if (img.tagName === 'IMG') {
+                    // Retry by reloading the image
+                    const src = img.src;
+                    img.onerror = null; // Clear previous error handler
+                    img.src = ''; // Clear src
+                    setTimeout(() => {
+                        img.src = src; // Retry loading
+                    }, 1000);
+                }
             }
-        } else {
-            gameState.mapTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                subdomains: 'abcd',
-                maxZoom: 20,
-                tileSize: 256,
-                zoomOffset: 0
-            });
-            // Re-add borders overlay on political view
+        });
+        
+        // Handle borders overlay
+        if (styleConfig.needsBorders) {
             if (countryBordersLayer && borderSettings.overlay !== false) {
                 countryBordersLayer.addTo(gameState.map);
             } else {
                 addCountryBordersLayer();
+            }
+        } else {
+            if (countryBordersLayer) {
+                gameState.map.removeLayer(countryBordersLayer);
             }
         }
         
         gameState.mapTileLayer.addTo(gameState.map);
     }
 }
+
+// Toggle map style (backward compatibility)
+// toggleMapStyle removed - map style is now in settings
 
 // ==================== DIFFICULTY LEVELS ====================
 
@@ -2903,14 +3229,14 @@ function initializeCustomSets() {
         });
     }
     
-    if (selectAllCountriesButton) {
+    if (selectAllCountriesButton && customSetCountriesList) {
         selectAllCountriesButton.addEventListener('click', () => {
             const checkboxes = customSetCountriesList.querySelectorAll('.custom-set-country-checkbox');
             checkboxes.forEach(cb => cb.checked = true);
         });
     }
     
-    if (deselectAllCountriesButton) {
+    if (deselectAllCountriesButton && customSetCountriesList) {
         deselectAllCountriesButton.addEventListener('click', () => {
             const checkboxes = customSetCountriesList.querySelectorAll('.custom-set-country-checkbox');
             checkboxes.forEach(cb => cb.checked = false);
@@ -2939,8 +3265,184 @@ function initializeCustomSets() {
 
 // Initialize map style
 function initializeMapStyle() {
-    if (mapStyleButton) {
-        mapStyleButton.addEventListener('click', toggleMapStyle);
+    // Handle inline map style options in settings
+    const inlineMapStyleOptions = document.querySelectorAll('.map-style-option-inline');
+    if (inlineMapStyleOptions.length > 0) {
+        inlineMapStyleOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                const style = option.dataset.style;
+                setMapStyle(style);
+                // Update active state
+                inlineMapStyleOptions.forEach(opt => opt.classList.remove('active'));
+                option.classList.add('active');
+            });
+        });
+        
+        // Set active style on load
+        inlineMapStyleOptions.forEach(opt => {
+            if (opt.dataset.style === mapStyle) {
+                opt.classList.add('active');
+            }
+        });
+    }
+    
+    // Also handle modal options if they exist (for backward compatibility)
+    if (mapStyleOptions.length > 0) {
+        mapStyleOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                const style = option.dataset.style;
+                setMapStyle(style);
+                if (mapStyleModal) {
+                    mapStyleModal.classList.add('hidden');
+                }
+                // Update active state
+                mapStyleOptions.forEach(opt => opt.classList.remove('active'));
+                option.classList.add('active');
+                // Also update inline options if they exist
+                inlineMapStyleOptions.forEach(opt => {
+                    opt.classList.remove('active');
+                    if (opt.dataset.style === style) {
+                        opt.classList.add('active');
+                    }
+                });
+            });
+        });
+    }
+}
+
+// Initialize leaderboards
+function initializeLeaderboards() {
+    loadLeaderboards();
+    
+    if (leaderboardButton) {
+        leaderboardButton.addEventListener('click', () => {
+            if (leaderboardModal) {
+                renderLeaderboard('blitz'); // Default to blitz
+                leaderboardModal.classList.remove('hidden');
+            }
+        });
+    }
+    
+    if (leaderboardTabs.length > 0) {
+        leaderboardTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const mode = tab.dataset.mode;
+                renderLeaderboard(mode);
+                // Update active tab
+                leaderboardTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+            });
+        });
+    }
+    
+    if (closeLeaderboardButton) {
+        closeLeaderboardButton.addEventListener('click', () => {
+            if (leaderboardModal) {
+                leaderboardModal.classList.add('hidden');
+            }
+        });
+    }
+}
+
+// Render leaderboard for a mode
+function renderLeaderboard(mode) {
+    if (!leaderboardContent) return;
+    
+    const scores = getTopScores(mode, 20);
+    
+    if (scores.length === 0) {
+        leaderboardContent.innerHTML = `
+            <div class="leaderboard-empty">
+                <p>No scores yet!</p>
+                <p>Play ${mode} mode to appear on the leaderboard.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    leaderboardContent.innerHTML = scores.map((entry, index) => {
+        const date = new Date(entry.date);
+        const dateStr = date.toLocaleDateString();
+        const rank = index + 1;
+        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+        
+        return `
+            <div class="leaderboard-entry ${rank <= 3 ? 'top-three' : ''}">
+                <div class="leaderboard-rank">${medal || rank}</div>
+                <div class="leaderboard-info">
+                    <div class="leaderboard-name">${entry.playerName || 'Player'}</div>
+                    <div class="leaderboard-date">${dateStr}</div>
+                </div>
+                <div class="leaderboard-score">
+                    <div class="score-value">${entry.score}</div>
+                    ${entry.flags ? `<div class="score-detail">${entry.flags} flags</div>` : ''}
+                    ${entry.accuracy !== undefined ? `<div class="score-detail">${entry.accuracy}%</div>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Initialize mobile settings
+function initializeMobileSettings() {
+    // Settings tabs
+    if (settingsTabs.length > 0) {
+        settingsTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+                // Hide all tab contents
+                document.querySelectorAll('.settings-tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                // Show selected tab content
+                const content = document.getElementById(`settings-${tabName}`);
+                if (content) {
+                    content.classList.add('active');
+                }
+                // Update active tab
+                settingsTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+            });
+        });
+    }
+    
+    // Haptic feedback
+    if (hapticFeedbackToggle) {
+        hapticFeedbackToggle.addEventListener('change', (e) => {
+            gameSettings.hapticFeedback = e.target.checked;
+            saveSettings();
+        });
+    }
+    
+    // Swipe gestures (placeholder - would need touch event handlers)
+    if (swipeGesturesToggle) {
+        swipeGesturesToggle.addEventListener('change', (e) => {
+            gameSettings.swipeGestures = e.target.checked;
+            saveSettings();
+        });
+    }
+    
+    // Fullscreen
+    if (fullscreenToggle) {
+        fullscreenToggle.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+    }
+    
+    // Landscape lock (placeholder - would need screen orientation API)
+    if (landscapeLockToggle) {
+        landscapeLockToggle.addEventListener('change', (e) => {
+            gameSettings.landscapeLock = e.target.checked;
+            saveSettings();
+        });
     }
 }
 
@@ -3047,7 +3549,6 @@ async function initGame() {
         initializeDailyChallenge();
         initializeTutorial();
         initializeQuizModes();
-        initializeCustomSets();
         initializeMapStyle();
         initializeKeyboardShortcuts();
         initializeDifficulty();
@@ -3056,6 +3557,8 @@ async function initGame() {
         initializeFontSizeControls();
         initializeCountryLabels();
         initializeOfflineIndicator();
+        initializeMobileSettings();
+        initializeBorderSettings();
         
         // Pre-load borders GeoJSON early (in parallel with country data)
         const bordersPreloadPromise = preloadCountryBordersGeoJSON().catch(err => {
@@ -3084,9 +3587,7 @@ async function initGame() {
         initMap();
         
         // Apply saved map style
-        if (mapStyle === 'satellite') {
-            toggleMapStyle(); // This will switch to satellite if currently political
-        }
+        setMapStyle(mapStyle);
         
         // Validate countries were loaded
         if (!gameState.countries || gameState.countries.length === 0) {
@@ -3351,8 +3852,12 @@ function initMap() {
         keyboard: false
     });
     
-    // Position zoom controls in a better location
-    gameState.map.zoomControl.setPosition('topright');
+    // Position zoom controls at bottom right
+    gameState.map.zoomControl.setPosition('bottomright');
+    // Setup zoom button handlers
+    setTimeout(() => {
+        setupZoomButtonHandlers();
+    }, 200);
 
     // Add map tiles with modern, clean style
     // Using CartoDB Voyager No Labels - modern, colorful, and clean
@@ -3361,8 +3866,30 @@ function initMap() {
         maxZoom: 6,
         subdomains: 'abcd',
         tileSize: 256,
-        zoomOffset: 0
+        zoomOffset: 0,
+        errorTileUrl: '', // Prevent broken tile images
+        crossOrigin: true,
+        retry: 3,
+        timeout: 10000
     }).addTo(gameState.map);
+    
+    // Handle tile loading errors - retry failed tiles
+    gameState.mapTileLayer.on('tileerror', function(error, tile) {
+        console.warn('Tile loading error:', error, tile);
+        // Retry loading the tile
+        if (tile && tile.el) {
+            const img = tile.el;
+            if (img.tagName === 'IMG') {
+                // Retry by reloading the image
+                const src = img.src;
+                img.onerror = null; // Clear previous error handler
+                img.src = ''; // Clear src
+                setTimeout(() => {
+                    img.src = src; // Retry loading
+                }, 1000);
+            }
+        }
+    });
     
     // Add country borders overlay layer for clearer borders
     addCountryBordersLayer();
@@ -3557,7 +4084,21 @@ function checkAnswer(clickedCountry, clickedLatLng) {
         stopTimer();
     }
     
+    // In blitz mode, immediately continue to next flag (no delay)
+    const isBlitzMode = currentGameMode === 'blitz';
+    
     const correctCountry = gameState.currentCountry;
+    // Safety checks
+    if (!correctCountry || !correctCountry.latlng || !Array.isArray(correctCountry.latlng) || correctCountry.latlng.length < 2) {
+        console.error('checkAnswer: correctCountry or latlng is invalid', correctCountry);
+        return;
+    }
+    
+    if (!clickedCountry || !clickedCountry.code || !clickedCountry.name) {
+        console.error('checkAnswer: clickedCountry is invalid', clickedCountry);
+        return;
+    }
+    
     const codeMatch = clickedCountry.code === correctCountry.code;
     const nameMatch = normalizeCountryName(clickedCountry.name) === normalizeCountryName(correctCountry.name);
     const isCorrect = codeMatch || nameMatch;
@@ -3645,6 +4186,16 @@ function checkAnswer(clickedCountry, clickedLatLng) {
         
         // Show correct country location marker (even when correct, for learning)
         setTimeout(() => {
+            if (!correctCountry || !correctCountry.latlng || !Array.isArray(correctCountry.latlng) || correctCountry.latlng.length < 2) {
+                console.error('Cannot show correct marker: invalid latlng');
+                return;
+            }
+            
+            if (!gameState.map) {
+                console.error('Cannot show correct marker: map not initialized');
+                return;
+            }
+            
             const correctMarker = L.marker(correctCountry.latlng, {
                 icon: L.divIcon({
                     className: 'correct-country-marker',
@@ -3663,14 +4214,20 @@ function checkAnswer(clickedCountry, clickedLatLng) {
             }, 10);
             
             // Pan to correct location if it's far from clicked location (smooth animation)
-            const clickedLatLng = gameState.clickedMarker.getLatLng();
-            const distance = gameState.map.distance(clickedLatLng, correctCountry.latlng);
-            if (distance > 500000) { // More than 500km away
-                gameState.map.setView(correctCountry.latlng, 3, {
-                    animate: true,
-                    duration: 1.5,
-                    easeLinearity: 0.25
-                });
+            if (gameState.clickedMarker) {
+                try {
+                    const clickedLatLng = gameState.clickedMarker.getLatLng();
+                    const distance = gameState.map.distance(clickedLatLng, correctCountry.latlng);
+                    if (distance > 500000) { // More than 500km away
+                        gameState.map.setView(correctCountry.latlng, 3, {
+                            animate: true,
+                            duration: 1.5,
+                            easeLinearity: 0.25
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Error calculating distance for pan:', e);
+                }
             }
         }, 1000);
     } else {
@@ -3697,6 +4254,16 @@ function checkAnswer(clickedCountry, clickedLatLng) {
         
         // Show correct country location
         setTimeout(() => {
+            if (!correctCountry || !correctCountry.latlng || !Array.isArray(correctCountry.latlng) || correctCountry.latlng.length < 2) {
+                console.error('Cannot show correct marker: invalid latlng');
+                return;
+            }
+            
+            if (!gameState.map) {
+                console.error('Cannot show correct marker: map not initialized');
+                return;
+            }
+            
             const correctMarker = L.marker(correctCountry.latlng, {
                 icon: L.divIcon({
                     className: 'correct-country-marker',
@@ -3707,18 +4274,37 @@ function checkAnswer(clickedCountry, clickedLatLng) {
             }).addTo(gameState.map);
             
             // Pan to correct location
-            gameState.map.setView(correctCountry.latlng, 3, {
-                animate: true,
-                duration: 1
-            });
+            try {
+                if (correctCountry && correctCountry.latlng && Array.isArray(correctCountry.latlng) && correctCountry.latlng.length >= 2) {
+                    gameState.map.setView(correctCountry.latlng, 3, {
+                        animate: true,
+                        duration: 1
+                    });
+                }
+            } catch (e) {
+                console.warn('Error panning to correct location:', e);
+            }
         }, 1000);
     }
 
     // Wait before next round (longer on mobile for better UX)
     const delay = window.innerWidth <= 768 ? 3000 : 2500;
-    setTimeout(() => {
-        nextRound();
-    }, delay);
+    // In blitz mode, use shorter delay and show country info card
+    if (isBlitzMode) {
+        // Show country info card briefly, then continue
+        showCountryInfoCard(correctCountry, isCorrect, distance);
+        setTimeout(() => {
+            if (blitzTimeRemaining > 0) {
+                nextRound();
+            }
+        }, 1500); // Shorter delay for blitz
+    } else {
+        // Show country info card for other modes
+        showCountryInfoCard(correctCountry, isCorrect, distance);
+        setTimeout(() => {
+            nextRound();
+        }, delay);
+    }
 }
 
 // Get streak multiplier
@@ -3899,6 +4485,12 @@ function startRound() {
     // Use the shuffled pool for selection
     const selectedFromPool = shuffledPool[randomIndex];
     
+    // Safety check
+    if (!selectedFromPool) {
+        console.error('startRound: No country selected from pool');
+        throw new Error('Failed to select a country. Try changing the filter or refresh the page.');
+    }
+    
     // For daily mode, use sequential countries
     let selectedCountry;
     if (currentGameMode === 'daily' && dailyChallengeCountries.length > 0 && countryPool.length >= gameState.currentRound) {
@@ -3906,11 +4498,13 @@ function startRound() {
     } else {
         // Use the randomly selected country from shuffled pool
         selectedCountry = selectedFromPool;
-        if (!selectedCountry || !selectedCountry.name || !selectedCountry.code) {
-            console.error('Invalid country selected:', selectedCountry);
-            console.error('Countries array:', gameState.countries);
-            throw new Error('Invalid country data structure. Check console for details.');
-        }
+    }
+    
+    // Validate selected country has required properties
+    if (!selectedCountry || !selectedCountry.name || !selectedCountry.code || !selectedCountry.latlng || !Array.isArray(selectedCountry.latlng) || selectedCountry.latlng.length < 2) {
+        console.error('startRound: Selected country is invalid', selectedCountry);
+        console.error('Countries array:', gameState.countries);
+        throw new Error('Selected country has invalid data. Try changing the filter or refresh the page.');
     }
     
     // Debug: Log selected country and verify it's in the filtered pool
@@ -4000,6 +4594,15 @@ function startRound() {
         stopTimer();
     }
     
+    // Start blitz timer if in blitz mode
+    if (currentGameMode === 'blitz') {
+        if (gameState.currentRound === 1) {
+            startBlitzTimer(); // Start timer on first round
+        }
+    } else {
+        stopBlitzTimer();
+    }
+    
     // Handle quiz type
     if (currentQuizType === 'multiple') {
         generateMultipleChoice();
@@ -4087,13 +4690,45 @@ function endGame() {
     
     // Stop timer
     stopTimer();
+    stopBlitzTimer();
     
-    // Update statistics (only in classic/daily/time/endless mode)
+    // Update statistics (only in classic/daily/time/endless/blitz mode)
     if (currentGameMode !== 'practice') {
         updateStatistics();
         checkAchievements();
         addGameToHistory();
         updatePersonalRecords();
+        
+        // Update leaderboard for all game modes
+        const flagsGuessed = gameState.correctAnswers + gameState.incorrectAnswers;
+        const accuracy = flagsGuessed > 0 ? Math.round((gameState.correctAnswers / flagsGuessed) * 100) : 0;
+        
+        if (currentGameMode === 'blitz') {
+            updateLeaderboard('blitz', {
+                score: gameState.score,
+                flags: flagsGuessed,
+                accuracy: accuracy,
+                date: new Date().toISOString()
+            });
+        } else if (currentGameMode === 'classic') {
+            updateLeaderboard('classic', {
+                score: gameState.score,
+                accuracy: accuracy,
+                date: new Date().toISOString()
+            });
+        } else if (currentGameMode === 'daily') {
+            updateLeaderboard('daily', {
+                score: gameState.score,
+                accuracy: accuracy,
+                date: new Date().toISOString()
+            });
+        } else if (currentGameMode === 'time') {
+            updateLeaderboard('time', {
+                score: gameState.score,
+                accuracy: accuracy,
+                date: new Date().toISOString()
+            });
+        }
     }
     
     // In practice mode, just show completion message
@@ -4108,6 +4743,7 @@ function endGame() {
 function restartGame() {
     // Stop timer
     stopTimer();
+    stopBlitzTimer();
     
     // Debug: Log filter state before restart
     console.log('restartGame() called - Current filter:', gameState.currentFilter, 'Filtered countries:', gameState.filteredCountries?.length || 0);
@@ -5054,19 +5690,13 @@ function applyBorderSettings() {
 
 // Initialize border settings system
 function initializeBorderSettings() {
-    // Get DOM elements
-    borderSettingsButton = document.getElementById('border-settings-button');
-    borderSettingsModal = document.getElementById('border-settings-modal');
+    // Get DOM elements (now in settings, not modal)
     borderThicknessSlider = document.getElementById('border-thickness');
     borderContrastSlider = document.getElementById('border-contrast');
     borderOverlayCheckbox = document.getElementById('border-overlay');
-    applyBorderSettingsButton = document.getElementById('apply-border-settings-button');
-    closeBorderSettingsButton = document.getElementById('close-border-settings-button');
     
     // Check if elements exist
-    if (!borderSettingsButton || !borderSettingsModal || !borderThicknessSlider || 
-        !borderContrastSlider || !borderOverlayCheckbox || !applyBorderSettingsButton || 
-        !closeBorderSettingsButton) {
+    if (!borderThicknessSlider || !borderContrastSlider || !borderOverlayCheckbox) {
         console.warn('Border settings elements not found, skipping initialization');
         return;
     }
@@ -5089,41 +5719,23 @@ function initializeBorderSettings() {
     borderContrastSlider.value = borderSettings.contrast;
     borderOverlayCheckbox.checked = borderSettings.overlay;
     
-    // Border settings button click
-    borderSettingsButton.addEventListener('click', () => {
-        borderSettingsModal.classList.remove('hidden');
-    });
-    
-    // Apply border settings
-    applyBorderSettingsButton.addEventListener('click', () => {
+    // Apply border settings on change (no modal needed)
+    borderThicknessSlider.addEventListener('input', () => {
         borderSettings.thickness = parseInt(borderThicknessSlider.value);
-        borderSettings.contrast = parseInt(borderContrastSlider.value);
-        borderSettings.overlay = borderOverlayCheckbox.checked;
-        
-        // Save to localStorage
         localStorage.setItem('flagfinder-border-settings', JSON.stringify(borderSettings));
-        
         applyBorderSettings();
-        borderSettingsModal.classList.add('hidden');
     });
     
-    // Close border settings
-    closeBorderSettingsButton.addEventListener('click', () => {
-        borderSettingsModal.classList.add('hidden');
-        // Reset to current settings
-        borderThicknessSlider.value = borderSettings.thickness;
-        borderContrastSlider.value = borderSettings.contrast;
-        borderOverlayCheckbox.checked = borderSettings.overlay;
+    borderContrastSlider.addEventListener('input', () => {
+        borderSettings.contrast = parseInt(borderContrastSlider.value);
+        localStorage.setItem('flagfinder-border-settings', JSON.stringify(borderSettings));
+        applyBorderSettings();
     });
     
-    // Close on Escape
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && borderSettingsModal && !borderSettingsModal.classList.contains('hidden')) {
-            borderSettingsModal.classList.add('hidden');
-            borderThicknessSlider.value = borderSettings.thickness;
-            borderContrastSlider.value = borderSettings.contrast;
-            borderOverlayCheckbox.checked = borderSettings.overlay;
-        }
+    borderOverlayCheckbox.addEventListener('change', () => {
+        borderSettings.overlay = borderOverlayCheckbox.checked;
+        localStorage.setItem('flagfinder-border-settings', JSON.stringify(borderSettings));
+        applyBorderSettings();
     });
 }
 
@@ -5160,7 +5772,13 @@ let preDownloadState = {
   dataDownloaded: 0,
   dataTotal: 0,
   isDownloading: false,
-  downloadProgress: 0
+  downloadProgress: 0,
+  startTime: null,
+  lastUpdateTime: null,
+  bytesDownloaded: 0,
+  estimatedTotalBytes: 0,
+  downloadSpeed: 0,
+  timeRemaining: 0
 };
 
 // Check if pre-download is needed
@@ -5226,6 +5844,11 @@ async function startPreDownload() {
   preDownloadState.dataTotal = gameState.allCountries.length;
   preDownloadState.flagsDownloaded = 0;
   preDownloadState.dataDownloaded = 0;
+  preDownloadState.startTime = Date.now();
+  preDownloadState.lastUpdateTime = Date.now();
+  preDownloadState.downloadSpeed = 0;
+  preDownloadState.timeRemaining = 0;
+  preDownloadState.estimatedTotalBytes = (preDownloadState.flagsTotal * 15 * 1024) + (preDownloadState.dataTotal * 2 * 1024);
   
   // Show progress UI
   showPreDownloadProgress();
@@ -5318,18 +5941,78 @@ function updatePreDownloadProgress() {
   const downloaded = preDownloadState.flagsDownloaded + preDownloadState.dataDownloaded;
   preDownloadState.downloadProgress = total > 0 ? Math.round((downloaded / total) * 100) : 0;
   
+  // Calculate download speed and time remaining
+  const now = Date.now();
+  if (preDownloadState.startTime && preDownloadState.lastUpdateTime) {
+    const timeDiff = (now - preDownloadState.lastUpdateTime) / 1000; // seconds
+    if (timeDiff > 0) {
+      // Estimate: each flag ~15KB, each data ~2KB
+      const estimatedBytesPerFlag = 15 * 1024;
+      const estimatedBytesPerData = 2 * 1024;
+      const bytesPerItem = (preDownloadState.flagsDownloaded * estimatedBytesPerFlag + 
+                           preDownloadState.dataDownloaded * estimatedBytesPerData) / Math.max(1, downloaded);
+      const itemsPerSecond = downloaded / ((now - preDownloadState.startTime) / 1000);
+      preDownloadState.downloadSpeed = itemsPerSecond * bytesPerItem;
+      
+      if (itemsPerSecond > 0) {
+        const remaining = total - downloaded;
+        preDownloadState.timeRemaining = Math.ceil(remaining / itemsPerSecond);
+      }
+    }
+  }
+  preDownloadState.lastUpdateTime = now;
+  
   const progressBar = document.getElementById('pre-download-progress-bar');
   const progressText = document.getElementById('pre-download-progress-text');
+  const progressDetails = document.getElementById('pre-download-progress-details');
   
   if (progressBar) {
     progressBar.style.width = `${preDownloadState.downloadProgress}%`;
   }
   
   if (progressText) {
+    progressText.textContent = `${preDownloadState.downloadProgress}% Complete`;
+  }
+  
+  if (progressDetails) {
     const flagsText = `Flags: ${preDownloadState.flagsDownloaded}/${preDownloadState.flagsTotal}`;
     const dataText = `Data: ${preDownloadState.dataDownloaded}/${preDownloadState.dataTotal}`;
-    progressText.textContent = `${flagsText} | ${dataText} | ${preDownloadState.downloadProgress}%`;
+    const speedText = formatBytes(preDownloadState.downloadSpeed) + '/s';
+    const timeText = formatTime(preDownloadState.timeRemaining);
+    const totalText = `Total: ${downloaded}/${total} items`;
+    
+    progressDetails.innerHTML = `
+      <div class="progress-detail-row">
+        <span>${flagsText}</span>
+        <span>${dataText}</span>
+      </div>
+      <div class="progress-detail-row">
+        <span>${totalText}</span>
+      </div>
+      <div class="progress-detail-row">
+        <span>Speed: ${speedText}</span>
+        <span>Time remaining: ${timeText}</span>
+      </div>
+    `;
   }
+}
+
+// Format bytes to human readable format
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+// Format seconds to human readable time
+function formatTime(seconds) {
+  if (seconds === 0 || !isFinite(seconds)) return 'Calculating...';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}m ${secs}s`;
 }
 
 // Show progress UI
@@ -5344,6 +6027,7 @@ function showPreDownloadProgress() {
             <div id="pre-download-progress-bar" class="pre-download-progress-bar" style="width: 0%"></div>
           </div>
           <p id="pre-download-progress-text">Starting download...</p>
+          <div id="pre-download-progress-details" class="pre-download-progress-details"></div>
         </div>
         <p class="pre-download-note">This may take a few minutes. You can continue playing while downloading.</p>
         <button id="cancel-pre-download" class="close-filter-button">Cancel</button>

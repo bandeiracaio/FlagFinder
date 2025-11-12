@@ -17,6 +17,7 @@
     <div class="game-container">
         <!-- Header -->
         <header class="game-header">
+            <div class="version-number">v1.0.2</div>
             <h1 class="game-title">FlagFinder</h1>
             <div class="header-controls">
                 <button id="game-mode-button" class="game-mode-button" aria-label="Game mode">
@@ -27,29 +28,9 @@
                     <span>🔍</span>
                     <span id="filter-label">All Countries</span>
                 </button>
-                <button id="difficulty-button" class="difficulty-button" aria-label="Difficulty level">
-                    <span>⚡</span>
-                    <span id="difficulty-label">Difficulty</span>
-                </button>
-                <button id="border-settings-button" class="border-settings-button" aria-label="Border settings">
-                    <span>🔲</span>
-                    <span>Borders</span>
-                </button>
-                <button id="map-style-button" class="map-style-button" aria-label="Map style">
-                    <span>🗺️</span>
-                    <span id="map-style-label">Map Style</span>
-                </button>
-                <button id="custom-sets-button" class="custom-sets-button" aria-label="Custom country sets">
-                    <span>📋</span>
-                    <span>Custom Sets</span>
-                </button>
                 <button id="daily-challenge-button" class="daily-challenge-button" aria-label="Daily Challenge">
                     <span>📅</span>
                     <span>Daily</span>
-                </button>
-                <button id="achievements-button" class="achievements-button" aria-label="Achievements">
-                    <span>🏆</span>
-                    <span>Achievements</span>
                 </button>
                 <button id="settings-button" class="settings-button" aria-label="Settings">
                     <span>⚙️</span>
@@ -58,6 +39,10 @@
                 <button id="stats-button" class="stats-button" aria-label="Statistics">
                     <span>📈</span>
                     <span>Stats</span>
+                </button>
+                <button id="leaderboard-button" class="leaderboard-button hidden" aria-label="Leaderboards" style="display: none;">
+                    <span>🏅</span>
+                    <span>Leaderboard</span>
                 </button>
             </div>
             <div class="stats">
@@ -106,6 +91,10 @@
                         </button>
                     </div>
                 </div>
+            </div>
+            <!-- Country Info Card (integrated) -->
+            <div id="country-info-card-integrated" class="country-info-card-integrated hidden">
+                <!-- Will be populated by JavaScript -->
             </div>
         </div>
         
@@ -369,49 +358,151 @@
         <div id="settings-modal" class="modal hidden" role="dialog" aria-labelledby="settings-title" aria-modal="true">
             <div class="modal-content settings-modal-content">
                 <h2 id="settings-title">Settings</h2>
-                <div class="settings-options">
-                    <div class="setting-item">
-                        <label>
-                            <input type="checkbox" id="dark-mode-toggle">
-                            <span>Dark Mode</span>
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <label>
-                            <input type="checkbox" id="sound-effects-toggle" checked>
-                            <span>Sound Effects</span>
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <label>
-                            <input type="checkbox" id="music-toggle">
-                            <span>Background Music</span>
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <label for="master-volume">Master Volume</label>
-                        <div class="slider-container">
-                            <input type="range" id="master-volume" min="0" max="100" value="50" step="5" class="volume-slider">
-                            <div class="slider-labels">
-                                <span>0%</span>
-                                <span>50%</span>
-                                <span>100%</span>
+                <div class="settings-tabs">
+                    <button class="settings-tab active" data-tab="general">General</button>
+                    <button class="settings-tab" data-tab="mobile">Mobile</button>
+                </div>
+                <div class="settings-tab-content active" id="settings-general">
+                    <div class="settings-options">
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="dark-mode-toggle">
+                                <span>Dark Mode</span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="sound-effects-toggle" checked>
+                                <span>Sound Effects</span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="music-toggle">
+                                <span>Background Music</span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label for="master-volume">Master Volume</label>
+                            <div class="slider-container">
+                                <input type="range" id="master-volume" min="0" max="100" value="50" step="5" class="volume-slider">
+                                <div class="slider-labels">
+                                    <span>0%</span>
+                                    <span>50%</span>
+                                    <span>100%</span>
+                                </div>
                             </div>
                         </div>
+                        <div class="setting-item">
+                            <label for="font-size">Font Size</label>
+                            <select id="font-size" class="font-size-select">
+                                <option value="small">Small</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="large">Large</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="country-labels-toggle" class="setting-checkbox">
+                                <span>Show Country Names on Map</span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label for="header-spacing">Header Spacing</label>
+                            <select id="header-spacing" class="header-spacing-select">
+                                <option value="default">Default</option>
+                                <option value="compact">Compact</option>
+                                <option value="minimal">Minimal</option>
+                            </select>
+                            <p class="setting-description">Control the spacing of header elements</p>
+                        </div>
+                        
+                        <!-- Map Style Settings -->
+                        <div class="setting-item">
+                            <label>Map Style</label>
+                            <div class="map-style-options-inline">
+                                <button class="map-style-option-inline" data-style="political">
+                                    <span class="map-style-icon">🗺️</span>
+                                    <span class="map-style-name">Political</span>
+                                </button>
+                                <button class="map-style-option-inline" data-style="dark">
+                                    <span class="map-style-icon">🌙</span>
+                                    <span class="map-style-name">Dark</span>
+                                </button>
+                                <button class="map-style-option-inline" data-style="satellite">
+                                    <span class="map-style-icon">🛰️</span>
+                                    <span class="map-style-name">Satellite</span>
+                                </button>
+                            </div>
+                            <p class="setting-description">Choose your preferred map style</p>
+                        </div>
+                        
+                        <!-- Border Settings -->
+                        <div class="setting-item">
+                            <label for="border-thickness">Border Thickness</label>
+                            <div class="slider-container">
+                                <input type="range" id="border-thickness" min="1" max="5" value="3" step="1" class="border-slider">
+                                <div class="slider-labels">
+                                    <span>Thin</span>
+                                    <span>Medium</span>
+                                    <span>Thick</span>
+                                </div>
+                            </div>
+                            <p class="setting-description">Adjust border thickness for better visibility</p>
+                        </div>
+                        
+                        <div class="setting-item">
+                            <label for="border-contrast">Border Contrast</label>
+                            <div class="slider-container">
+                                <input type="range" id="border-contrast" min="1" max="5" value="3" step="1" class="border-slider">
+                                <div class="slider-labels">
+                                    <span>Low</span>
+                                    <span>Medium</span>
+                                    <span>High</span>
+                                </div>
+                            </div>
+                            <p class="setting-description">Adjust border contrast for better visibility</p>
+                        </div>
+                        
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="border-overlay">
+                                <span>Enhanced Border Overlay</span>
+                            </label>
+                            <p class="setting-description">Adds a subtle overlay to make borders more visible</p>
+                        </div>
                     </div>
-                    <div class="setting-item">
-                        <label for="font-size">Font Size</label>
-                        <select id="font-size" class="font-size-select">
-                            <option value="small">Small</option>
-                            <option value="medium" selected>Medium</option>
-                            <option value="large">Large</option>
-                        </select>
-                    </div>
-                    <div class="setting-item">
-                        <label>
-                            <input type="checkbox" id="country-labels-toggle" class="setting-checkbox">
-                            <span>Show Country Names on Map</span>
-                        </label>
+                </div>
+                <div class="settings-tab-content" id="settings-mobile">
+                    <div class="settings-options">
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="haptic-feedback-toggle">
+                                <span>Haptic Feedback</span>
+                            </label>
+                            <p class="setting-description">Vibration on correct answers (mobile only)</p>
+                        </div>
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="swipe-gestures-toggle" checked>
+                                <span>Swipe Gestures</span>
+                            </label>
+                            <p class="setting-description">Enable swipe navigation</p>
+                        </div>
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="fullscreen-toggle">
+                                <span>Fullscreen Mode</span>
+                            </label>
+                            <p class="setting-description">Hide browser UI for immersive gameplay</p>
+                        </div>
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="landscape-lock-toggle">
+                                <span>Lock Landscape Orientation</span>
+                            </label>
+                            <p class="setting-description">Prevent rotation during gameplay</p>
+                        </div>
                     </div>
                 </div>
                 <div class="filter-actions">
@@ -740,6 +831,11 @@
                         <span class="mode-name">Endless</span>
                         <span class="mode-description">Play until wrong</span>
                     </button>
+                    <button class="game-mode-option" data-mode="blitz">
+                        <span class="mode-icon">⚡</span>
+                        <span class="mode-name">Blitz</span>
+                        <span class="mode-description">60 seconds, as many as possible</span>
+                    </button>
                 </div>
                 <div class="filter-actions">
                     <button id="close-game-mode-button" class="close-filter-button">Cancel</button>
@@ -756,6 +852,52 @@
                 </div>
                 <div class="filter-actions">
                     <button id="close-achievements-button" class="apply-filter-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Leaderboard Modal -->
+        <div id="leaderboard-modal" class="modal hidden" role="dialog" aria-labelledby="leaderboard-title" aria-modal="true">
+            <div class="modal-content leaderboard-modal-content">
+                <h2 id="leaderboard-title">Leaderboards</h2>
+                <div class="leaderboard-tabs">
+                    <button class="leaderboard-tab active" data-mode="blitz">Blitz</button>
+                    <button class="leaderboard-tab" data-mode="classic">Classic</button>
+                    <button class="leaderboard-tab" data-mode="daily">Daily</button>
+                    <button class="leaderboard-tab" data-mode="time">Time Challenge</button>
+                </div>
+                <div id="leaderboard-content" class="leaderboard-content">
+                    <!-- Leaderboard entries will be populated by JavaScript -->
+                </div>
+                <div class="filter-actions">
+                    <button id="close-leaderboard-button" class="close-filter-button">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Style Modal -->
+        <div id="map-style-modal" class="modal hidden" role="dialog" aria-labelledby="map-style-title" aria-modal="true">
+            <div class="modal-content map-style-modal-content">
+                <h2 id="map-style-title">Select Map Style</h2>
+                <div class="map-style-options">
+                    <button class="map-style-option" data-style="political">
+                        <span class="map-style-icon">🗺️</span>
+                        <span class="map-style-name">Political</span>
+                        <span class="map-style-description">Clear country borders</span>
+                    </button>
+                    <button class="map-style-option" data-style="dark">
+                        <span class="map-style-icon">🌙</span>
+                        <span class="map-style-name">Dark</span>
+                        <span class="map-style-description">Dark theme map</span>
+                    </button>
+                    <button class="map-style-option" data-style="satellite">
+                        <span class="map-style-icon">🛰️</span>
+                        <span class="map-style-name">Satellite</span>
+                        <span class="map-style-description">Real-world imagery</span>
+                    </button>
+                </div>
+                <div class="filter-actions">
+                    <button id="close-map-style-button" class="close-filter-button">Close</button>
                 </div>
             </div>
         </div>

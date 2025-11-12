@@ -2,6 +2,8 @@
 
 A fun and educational geography quiz game where you identify countries by their flags on an interactive world map!
 
+**Version: v1.0.2**
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PWA](https://img.shields.io/badge/PWA-enabled-667eea.svg)](https://web.dev/progressive-web-apps/)
 
@@ -11,7 +13,8 @@ A fun and educational geography quiz game where you identify countries by their 
 - **Classic Mode** - 10 rounds with scoring and streak multipliers
 - **Practice Mode** - Learn flags without pressure
 - **Daily Challenge** - Same flags for everyone, changes daily
-- **Time Challenge** - 3 seconds per flag (fast-paced!)
+- **Time Challenge** - 4 seconds per flag (fast-paced!)
+- **Blitz Mode** - 60-second countdown, score as many as you can!
 - **Endless Mode** - Play until you get one wrong
 
 ### Advanced Filtering System
@@ -23,14 +26,14 @@ A fun and educational geography quiz game where you identify countries by their 
   - **Cultural & Historical**: Former Soviet Union, Latin America, Commonwealth Realms, and more
   - **Difficulty**: Large, Medium, Small countries, Microstates, Islands, Landlocked
 - **Smart Filtering**: Add filters to include countries, or subtract filters to exclude them
-- **Custom Country Sets**: Create and save your own country pools
+- **Three-State Filter System**: Click once to add, twice to subtract, three times to remove
 
 ### Game Features
 - 🎯 **Interactive World Map** - Click on countries using Leaflet.js
 - 🏆 **Achievement System** - Unlock achievements as you play
 - 📊 **Statistics Tracking** - Track your progress by region, country, and game mode
 - 💡 **Hint System** - Get hints about continent, capital, population, or neighbors
-- 🎨 **Multiple Map Styles** - Political or Satellite view
+- 🎨 **Multiple Map Styles** - Political (light), Dark mode, and Satellite view
 - 🌓 **Dark Mode** - Easy on the eyes
 - 📱 **Progressive Web App** - Install and play offline
 - ⚙️ **Customizable Settings** - Border visibility, country labels, sound effects, and more
@@ -122,11 +125,13 @@ FlagFinder/
 
 ### Settings
 - **Dark Mode**: Toggle dark theme
-- **Map Style**: Switch between Political and Satellite views
-- **Border Settings**: Adjust border thickness and contrast
+- **Map Style**: Choose from Political (light), Dark mode, or Satellite view
+- **Border Settings**: Adjust border thickness, contrast, and overlay visibility
 - **Country Labels**: Show/hide country names on the map
 - **Sound Effects**: Enable/disable game sounds
 - **Font Size**: Adjust text size for accessibility
+- **Header Spacing**: Control spacing of header elements (Default, Compact, Minimal)
+- **Mobile Settings**: Haptic feedback, swipe gestures, fullscreen mode, landscape lock
 
 ## 📊 Statistics & Achievements
 

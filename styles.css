@@ -4249,12 +4249,25 @@ body.dark-mode .map-style-option.active {
     align-items: center;
     gap: 0.5rem;
     text-align: center;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
+    min-height: 60px;
 }
 
 .map-style-option-inline:hover {
     background: rgba(102, 126, 234, 0.1);
     border-color: rgba(102, 126, 234, 0.4);
     transform: translateY(-2px);
+}
+
+.map-style-option-inline:active {
+    transform: scale(0.95);
+    background: rgba(102, 126, 234, 0.15);
 }
 
 .map-style-option-inline.active {
@@ -4309,15 +4322,28 @@ body.dark-mode .map-style-option-inline.active {
     border-bottom: 2px solid transparent;
     margin-bottom: -2px;
     transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
 }
 
 .settings-tab:hover {
     color: #667eea;
 }
 
+.settings-tab:active {
+    color: #667eea;
+    transform: scale(0.98);
+}
+
 .settings-tab.active {
     color: #667eea;
     border-bottom-color: #667eea;
+    font-weight: 600;
 }
 
 .settings-tab-content {
@@ -4371,11 +4397,33 @@ body.dark-mode .settings-tab.active {
     
     .settings-tabs {
         flex-wrap: wrap;
+        gap: 0.25rem;
     }
     
     .settings-tab {
-        padding: 0.5rem 1rem;
-        font-size: 0.75rem;
+        padding: 0.75rem 1.25rem;
+        font-size: 0.875rem;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .map-style-options-inline {
+        gap: 0.5rem;
+    }
+    
+    .map-style-option-inline {
+        padding: 1rem 0.5rem;
+        min-height: 70px;
+    }
+    
+    .map-style-option-inline .map-style-icon {
+        font-size: 1.75rem;
+    }
+    
+    .map-style-option-inline .map-style-name {
+        font-size: 0.8rem;
     }
     
     .leaderboard-button span:not(:first-child) {

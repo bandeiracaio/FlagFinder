@@ -3265,17 +3265,22 @@ function initializeCustomSets() {
 
 // Initialize map style
 function initializeMapStyle() {
-    // Handle inline map style options in settings
+    // Handle inline map style options in settings - support both click and touch
     const inlineMapStyleOptions = document.querySelectorAll('.map-style-option-inline');
     if (inlineMapStyleOptions.length > 0) {
         inlineMapStyleOptions.forEach(option => {
-            option.addEventListener('click', () => {
+            const handleStyleClick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 const style = option.dataset.style;
                 setMapStyle(style);
                 // Update active state
                 inlineMapStyleOptions.forEach(opt => opt.classList.remove('active'));
                 option.classList.add('active');
-            });
+            };
+            // Add both click and touchstart for better mobile support
+            option.addEventListener('click', handleStyleClick);
+            option.addEventListener('touchstart', handleStyleClick, { passive: false });
         });
         
         // Set active style on load
@@ -3385,10 +3390,12 @@ function renderLeaderboard(mode) {
 
 // Initialize mobile settings
 function initializeMobileSettings() {
-    // Settings tabs
+    // Settings tabs - handle both click and touch events for mobile
     if (settingsTabs.length > 0) {
         settingsTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
+            const handleTabClick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 const tabName = tab.dataset.tab;
                 // Hide all tab contents
                 document.querySelectorAll('.settings-tab-content').forEach(content => {
@@ -3402,7 +3409,10 @@ function initializeMobileSettings() {
                 // Update active tab
                 settingsTabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
-            });
+            };
+            // Add both click and touchstart for better mobile support
+            tab.addEventListener('click', handleTabClick);
+            tab.addEventListener('touchstart', handleTabClick, { passive: false });
         });
     }
     

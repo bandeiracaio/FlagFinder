@@ -72,7 +72,7 @@ let blitzTimeRemaining = 60;
 let gameHistory = [];
 let customCountrySets = {};
 let editingCustomSetId = null;
-let mapStyle = 'political'; // 'political', 'satellite'
+let mapStyle = 'dark'; // 'political', 'dark', 'satellite' - Default to dark
 let currentDifficulty = 'all'; // 'all', 'easy', 'medium', 'hard', 'expert'
 let playerLevel = 1;
 let playerXP = 0;
@@ -94,7 +94,7 @@ let bordersLoadingPromise = null; // Promise for borders loading to avoid duplic
 
 // Settings stored in localStorage
 let gameSettings = {
-    darkMode: false,
+    darkMode: true, // Default to dark mode
     soundEffects: true,
     music: false,
     masterVolume: 50,
@@ -742,8 +742,8 @@ function loadMapStyle() {
     if (saved && mapStyles[saved]) {
         mapStyle = saved;
     } else {
-        // Default to political if saved style doesn't exist
-        mapStyle = 'political';
+        // Default to dark if saved style doesn't exist
+        mapStyle = 'dark';
     }
 }
 
@@ -1251,8 +1251,9 @@ function initializeDataSystems() {
     loadFontSize();
     loadCountryLabelsSetting();
     
-    // Check system preference for dark mode
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches && !localStorage.getItem('flagfinder-settings')) {
+    // Dark mode is now default, but check system preference if no settings saved
+    if (!localStorage.getItem('flagfinder-settings')) {
+        // Default to dark mode, but can be overridden by system preference if user prefers
         gameSettings.darkMode = true;
     }
     
@@ -2560,9 +2561,9 @@ const mapStyles = {
 
 // Set map style
 function setMapStyle(style) {
-    // If style doesn't exist, default to political
+    // If style doesn't exist, default to dark
     if (!mapStyles[style]) {
-        style = 'political';
+        style = 'dark';
     }
     
     mapStyle = style;
@@ -3862,8 +3863,8 @@ function initMap() {
         keyboard: false
     });
     
-    // Position zoom controls at bottom right
-    gameState.map.zoomControl.setPosition('bottomright');
+    // Position zoom controls at top right (moved from bottomright to avoid flag container)
+    gameState.map.zoomControl.setPosition('topright');
     // Setup zoom button handlers
     setTimeout(() => {
         setupZoomButtonHandlers();

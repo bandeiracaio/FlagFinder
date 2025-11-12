@@ -1306,29 +1306,29 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-    /* Header improvements */
+    /* Header improvements - more compact */
     .game-header {
-        padding: 0.75rem;
+        padding: 0.4rem 0.5rem;
         flex-direction: column;
         align-items: stretch;
-        gap: 0.75rem;
+        gap: 0.4rem;
     }
 
     .game-title {
-        font-size: 1.5rem;
-        margin-bottom: 0.5rem;
+        font-size: 1.25rem;
+        margin-bottom: 0.25rem;
     }
 
     /* Header controls - make buttons smaller and wrap better */
     .header-controls {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.5rem;
+        gap: 0.35rem;
         width: 100%;
         justify-content: flex-start;
     }
 
-    /* Make buttons more touch-friendly but smaller text */
+    /* Make buttons more compact - icon-only on mobile */
     .filter-button,
     .game-mode-button,
     .daily-challenge-button,
@@ -1339,10 +1339,12 @@ body {
     .custom-sets-button,
     .difficulty-button,
     .border-settings-button {
-        padding: 0.5rem 0.75rem;
-        font-size: 0.75rem;
-        min-height: 36px; /* Better touch target */
+        padding: 0.35rem 0.5rem;
+        font-size: 0.7rem;
+        min-height: 32px;
+        min-width: 32px;
         flex: 0 1 auto;
+        justify-content: center;
     }
 
     /* Hide button text on mobile, show only icons */
@@ -1359,7 +1361,7 @@ body {
         display: none;
     }
 
-    /* Keep icon size readable */
+    /* Keep icon size readable but compact */
     .filter-button span:first-child,
     .game-mode-button span:first-child,
     .daily-challenge-button span:first-child,
@@ -1370,55 +1372,71 @@ body {
     .custom-sets-button span:first-child,
     .difficulty-button span:first-child,
     .border-settings-button span:first-child {
-        font-size: 1.1rem;
+        font-size: 1rem;
     }
 
-    /* Stats improvements */
+    /* Stats improvements - more compact */
     .stats {
         width: 100%;
         justify-content: space-between;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
+        gap: 0.25rem;
+        margin-top: 0.25rem;
     }
 
     .stat-item {
         flex: 1;
-        min-width: 0; /* Allow shrinking */
+        min-width: 0;
+        gap: 0.15rem;
     }
 
     .stat-label {
-        font-size: 0.65rem;
+        font-size: 0.55rem;
+        line-height: 1;
     }
 
     .stat-value {
-        font-size: 1.1rem;
+        font-size: 0.95rem;
+        line-height: 1.2;
     }
 
+    /* Flag container - more compact */
     .flag-container {
-        padding: 0.5rem;
+        padding: 0.35rem 0.5rem;
     }
     
     .flag-wrapper {
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.35rem;
         align-items: center;
     }
 
     .flag-image {
-        max-width: 120px;
-        width: 120px;
-        height: 80px;
+        max-width: 100px;
+        width: 100px;
+        height: 66px;
     }
 
     .flag-instruction {
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         text-align: center;
+        margin: 0;
     }
 
-    /* Map container - better sizing */
+    .flag-actions {
+        gap: 0.5rem;
+    }
+
+    .hint-button,
+    .quiz-mode-button {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.7rem;
+        min-height: 32px;
+    }
+
+    /* Map container - maximize space */
     .map-container {
-        min-height: 300px;
-        height: calc(100vh - 400px); /* Adjust based on header/flag height */
+        min-height: 250px;
+        height: calc(100vh - 280px); /* More space for map */
     }
 
     .feedback-content {
@@ -1468,20 +1486,49 @@ body {
     .game-header {
         flex-direction: row;
         flex-wrap: wrap;
+        padding: 0.3rem 0.4rem;
+        gap: 0.3rem;
+    }
+
+    .game-title {
+        font-size: 1.1rem;
+        margin-bottom: 0;
     }
 
     .header-controls {
         flex: 1;
         justify-content: flex-end;
+        gap: 0.3rem;
     }
 
     .stats {
         flex-direction: row;
         width: auto;
+        gap: 0.5rem;
+        margin-top: 0;
+    }
+
+    .stat-label {
+        font-size: 0.5rem;
+    }
+
+    .stat-value {
+        font-size: 0.85rem;
+    }
+
+    .flag-container {
+        padding: 0.25rem 0.4rem;
+    }
+
+    .flag-image {
+        max-width: 80px;
+        width: 80px;
+        height: 53px;
     }
 
     .map-container {
-        height: calc(100vh - 200px);
+        height: calc(100vh - 150px);
+        min-height: 200px;
     }
 }
 
@@ -3181,14 +3228,14 @@ body.font-large .record-value {
 
 @media (max-width: 480px) {
     .game-header {
-        padding: 0.5rem;
+        padding: 0.3rem 0.4rem;
     }
 
     .game-title {
-        font-size: 1.25rem;
+        font-size: 1.1rem;
     }
 
-    /* Even smaller buttons */
+    /* Even smaller buttons - icon-only */
     .filter-button,
     .game-mode-button,
     .daily-challenge-button,
@@ -3199,39 +3246,64 @@ body.font-large .record-value {
     .custom-sets-button,
     .difficulty-button,
     .border-settings-button {
-        padding: 0.4rem 0.6rem;
-        font-size: 0.7rem;
-        min-height: 32px;
+        padding: 0.3rem 0.4rem;
+        font-size: 0.65rem;
+        min-height: 30px;
+        min-width: 30px;
+    }
+
+    .filter-button span:first-child,
+    .game-mode-button span:first-child,
+    .daily-challenge-button span:first-child,
+    .achievements-button span:first-child,
+    .settings-button span:first-child,
+    .stats-button span:first-child,
+    .map-style-button span:first-child,
+    .custom-sets-button span:first-child,
+    .difficulty-button span:first-child,
+    .border-settings-button span:first-child {
+        font-size: 0.95rem;
     }
 
     /* Stats - make them even more compact */
     .stats {
-        gap: 0.25rem;
+        gap: 0.2rem;
     }
 
     .stat-label {
-        font-size: 0.6rem;
+        font-size: 0.5rem;
     }
 
     .stat-value {
-        font-size: 1rem;
+        font-size: 0.85rem;
     }
 
     /* Flag image smaller */
+    .flag-container {
+        padding: 0.25rem 0.4rem;
+    }
+
     .flag-image {
-        max-width: 100px;
-        width: 100px;
-        height: 66px;
+        max-width: 85px;
+        width: 85px;
+        height: 56px;
     }
 
     .flag-instruction {
-        font-size: 0.75rem;
+        font-size: 0.65rem;
     }
 
-    /* Map container */
+    .hint-button,
+    .quiz-mode-button {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.65rem;
+        min-height: 30px;
+    }
+
+    /* Map container - maximize space */
     .map-container {
-        min-height: 250px;
-        height: calc(100vh - 350px);
+        min-height: 200px;
+        height: calc(100vh - 250px);
     }
 
     .feedback-message {

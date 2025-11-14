@@ -2291,6 +2291,7 @@ function addCountryBordersLayer() {
             }
             
             // Create layer synchronously since data is cached
+            // Use increased padding and disable updates during zoom for smooth performance
             countryBordersLayer = L.geoJSON(bordersGeoJSONCache, {
                 style: function(feature) {
                     return {
@@ -2304,13 +2305,22 @@ function addCountryBordersLayer() {
                 },
                 interactive: false,
                 pane: 'overlayPane',
-                renderer: L.canvas({ padding: 0.5 })
+                renderer: L.canvas({ padding: 1.0 }), // Increased padding reduces re-renders
+                updateWhenZooming: false, // Don't update during zoom animation
+                updateWhenIdle: true // Update when zoom completes
             });
             
             // Add to map if overlay is enabled
             if (borderSettings.overlay !== false) {
                 countryBordersLayer.addTo(gameState.map);
             }
+            
+            // Set up zoomend handler for smooth updates
+            if (gameState.map) {
+                gameState.map.off('zoomend', updateBordersOnZoomEnd);
+                gameState.map.on('zoomend', updateBordersOnZoomEnd);
+            }
+            
             return;
         } catch (error) {
             console.warn('Error using cached borders, falling back:', error);
@@ -2347,12 +2357,20 @@ function addTileBasedBorders() {
         zoomOffset: 0,
         opacity: borderStyle.opacity * 0.8, // Adjust opacity based on contrast setting
         pane: 'overlayPane',
-        className: 'country-borders-tile-layer'
+        className: 'country-borders-tile-layer',
+        updateWhenZooming: false, // Don't update during zoom animation
+        updateWhenIdle: true // Update when zoom completes
     });
     
     // Add borders layer to map
     if (borderSettings.overlay !== false) {
         countryBordersLayer.addTo(gameState.map);
+    }
+    
+    // Set up zoomend handler for smooth updates
+    if (gameState.map) {
+        gameState.map.off('zoomend', updateBordersOnZoomEnd);
+        gameState.map.on('zoomend', updateBordersOnZoomEnd);
     }
 }
 
@@ -2431,7 +2449,9 @@ function updateBordersLayerStyle() {
                 },
                 interactive: false,
                 pane: 'overlayPane',
-                renderer: L.canvas({ padding: 0.5 })
+                renderer: L.canvas({ padding: 1.0 }), // Increased padding
+                updateWhenZooming: false, // Don't update during zoom
+                updateWhenIdle: true // Update when idle
             });
         } else {
             // Fallback to tile layer
@@ -2443,13 +2463,25 @@ function updateBordersLayerStyle() {
                 zoomOffset: 0,
                 opacity: style.opacity * 0.8,
                 pane: 'overlayPane',
-                className: 'country-borders-tile-layer'
+                className: 'country-borders-tile-layer',
+                updateWhenZooming: false, // Don't update during zoom animation
+                updateWhenIdle: true // Update when zoom completes
             });
         }
         
         if (wasAdded && borderSettings.overlay !== false) {
             countryBordersLayer.addTo(gameState.map);
         }
+    }
+}
+
+// Update borders after zoom ends (for smooth zoom experience)
+function updateBordersOnZoomEnd() {
+    if (countryBordersLayer && countryBordersLayer.redraw) {
+        // Use requestAnimationFrame to ensure smooth update
+        requestAnimationFrame(() => {
+            countryBordersLayer.redraw();
+        });
     }
 }
 
@@ -2531,12 +2563,21 @@ async function loadCountryBordersGeoJSON() {
                 },
                 interactive: false,
                 pane: 'overlayPane',
-                renderer: L.canvas({ padding: 0.5 }) // Use canvas renderer for better performance
+                renderer: L.canvas({ padding: 1.0 }), // Increased padding reduces re-renders
+                updateWhenZooming: false, // Don't update during zoom animation
+                updateWhenIdle: true // Update when zoom completes
             });
             
             // Add to map if overlay is enabled
             if (borderSettings.overlay !== false) {
                 countryBordersLayer.addTo(gameState.map);
+            }
+            
+            // Update borders only after zoom ends (not during animation)
+            // Remove any existing zoomend handler first to avoid duplicates
+            if (gameState.map) {
+                gameState.map.off('zoomend', updateBordersOnZoomEnd);
+                gameState.map.on('zoomend', updateBordersOnZoomEnd);
             }
         });
         

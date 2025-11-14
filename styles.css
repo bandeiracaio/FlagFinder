@@ -1266,6 +1266,39 @@ body {
     max-width: 120px;
 }
 
+.comparison-label {
+    font-size: 0.75rem;
+    font-style: italic;
+    color: #666;
+    text-align: center;
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.comparison-details {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    width: 100%;
+    align-items: center;
+}
+
+.comparison-detail-item {
+    font-size: 0.7rem;
+    color: #555;
+    text-align: center;
+    line-height: 1.3;
+}
+
+body.dark-mode .comparison-label {
+    color: #aaa;
+}
+
+body.dark-mode .comparison-detail-item {
+    color: #ccc;
+}
+
 .flag-comparison-distance {
     display: flex;
     flex-direction: column;
@@ -1331,6 +1364,19 @@ body.dark-mode .distance-arrow {
     .comparison-flag {
         width: 100px;
         height: 67px;
+    }
+    
+    .comparison-details {
+        margin-top: 0.4rem;
+        gap: 0.2rem;
+    }
+    
+    .comparison-detail-item {
+        font-size: 0.65rem;
+    }
+    
+    .comparison-label {
+        font-size: 0.7rem;
     }
 }
 

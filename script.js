@@ -127,8 +127,14 @@ const nextRoundButton = document.getElementById('next-round-button');
 const flagComparison = document.getElementById('flag-comparison');
 const guessedFlag = document.getElementById('guessed-flag');
 const guessedCountryName = document.getElementById('guessed-country-name');
+const guessedCapital = document.getElementById('guessed-capital');
+const guessedPopulation = document.getElementById('guessed-population');
+const guessedArea = document.getElementById('guessed-area');
 const correctFlag = document.getElementById('correct-flag');
 const correctCountryName = document.getElementById('correct-country-name');
+const correctCapital = document.getElementById('correct-capital');
+const correctPopulation = document.getElementById('correct-population');
+const correctArea = document.getElementById('correct-area');
 const distanceIndicator = document.getElementById('distance-indicator');
 const gameOverModal = document.getElementById('game-over-modal');
 const finalScoreElement = document.getElementById('final-score');
@@ -4400,6 +4406,17 @@ function showFeedback(isCorrect, message, countryNameText = '', showNextButton =
             guessedCountryName.textContent = guessedCountry.name || 'Unknown';
         }
         
+        // Set guessed country details
+        if (guessedCapital) {
+            guessedCapital.textContent = guessedCountry.capital ? `Capital: ${guessedCountry.capital}` : '';
+        }
+        if (guessedPopulation) {
+            guessedPopulation.textContent = guessedCountry.population ? `Population: ${formatPopulation(guessedCountry.population)}` : '';
+        }
+        if (guessedArea) {
+            guessedArea.textContent = guessedCountry.area ? `Area: ${formatNumber(Math.round(guessedCountry.area))} km²` : '';
+        }
+        
         // Set correct country flag and name
         if (correctFlagUrl && correctFlag) {
             correctFlag.src = correctFlagUrl;
@@ -4415,6 +4432,17 @@ function showFeedback(isCorrect, message, countryNameText = '', showNextButton =
         }
         if (correctCountryName) {
             correctCountryName.textContent = correctCountry.name || 'Unknown';
+        }
+        
+        // Set correct country details
+        if (correctCapital) {
+            correctCapital.textContent = correctCountry.capital ? `Capital: ${correctCountry.capital}` : '';
+        }
+        if (correctPopulation) {
+            correctPopulation.textContent = correctCountry.population ? `Population: ${formatPopulation(correctCountry.population)}` : '';
+        }
+        if (correctArea) {
+            correctArea.textContent = correctCountry.area ? `Area: ${formatNumber(Math.round(correctCountry.area))} km²` : '';
         }
         
         // Set distance indicator
@@ -4459,10 +4487,17 @@ function showFeedback(isCorrect, message, countryNameText = '', showNextButton =
 function hideFeedback() {
     if (feedbackOverlay) {
         feedbackOverlay.style.opacity = '0';
-        // Hide flag comparison
+        // Hide flag comparison and clear details
         if (flagComparison) {
             flagComparison.classList.add('hidden');
         }
+        // Clear country details
+        if (guessedCapital) guessedCapital.textContent = '';
+        if (guessedPopulation) guessedPopulation.textContent = '';
+        if (guessedArea) guessedArea.textContent = '';
+        if (correctCapital) correctCapital.textContent = '';
+        if (correctPopulation) correctPopulation.textContent = '';
+        if (correctArea) correctArea.textContent = '';
         setTimeout(() => {
             feedbackOverlay.classList.add('hidden');
             if (nextRoundButton) {

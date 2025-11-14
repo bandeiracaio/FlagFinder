@@ -796,6 +796,16 @@ body {
     z-index: 1002 !important;
 }
 
+.map-container .leaflet-bottom {
+    z-index: 1002 !important;
+    pointer-events: none !important;
+}
+
+.map-container .leaflet-bottom > * {
+    pointer-events: auto !important;
+    z-index: 1002 !important;
+}
+
 /* Improve tile loading appearance */
 .map-container .leaflet-tile-loaded {
     opacity: 1;
@@ -826,7 +836,7 @@ body {
     overflow: visible !important;
     z-index: 10000 !important;
     pointer-events: auto !important;
-    margin-top: 10px !important;
+    margin-bottom: 10px !important;
     margin-right: 10px !important;
 }
 
@@ -1011,8 +1021,12 @@ body {
 
 /* Border settings modal */
 .border-settings-content {
-    max-width: 500px;
+    max-width: 800px;
+    max-height: 90vh;
     text-align: left;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .border-settings-options {
@@ -1020,6 +1034,10 @@ body {
     flex-direction: column;
     gap: 2rem;
     margin-bottom: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .border-setting-item {
@@ -1134,6 +1152,10 @@ body {
     pointer-events: none;
 }
 
+.feedback-overlay:not(.hidden) {
+    pointer-events: auto;
+}
+
 .feedback-content {
     background: rgba(255, 255, 255, 0.95);
     padding: 2rem 3rem;
@@ -1179,6 +1201,190 @@ body {
     font-style: italic;
 }
 
+.flag-comparison {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: rgba(102, 126, 234, 0.05);
+    border-radius: 15px;
+    flex-wrap: wrap;
+}
+
+.flag-comparison.hidden {
+    display: none;
+}
+
+.flag-comparison-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 0 0 auto;
+}
+
+.comparison-flag {
+    width: 120px;
+    height: 80px;
+    border: 3px solid #667eea;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    background: white;
+    padding: 0.25rem;
+    object-fit: contain;
+    transition: transform 0.3s ease;
+    display: block;
+    min-height: 80px;
+}
+
+.comparison-flag[src=""],
+.comparison-flag:not([src]) {
+    background: rgba(102, 126, 234, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.comparison-flag[src=""]::before,
+.comparison-flag:not([src])::before {
+    content: "Loading...";
+    font-size: 0.75rem;
+    color: #667eea;
+}
+
+.comparison-flag:hover {
+    transform: scale(1.05);
+}
+
+.comparison-country-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+    max-width: 120px;
+}
+
+.flag-comparison-distance {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 0 0 auto;
+    min-width: 80px;
+}
+
+.distance-indicator {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+
+.distance-arrow {
+    font-size: 1.5rem;
+    color: #667eea;
+    font-weight: bold;
+}
+
+body.dark-mode .flag-comparison {
+    background: rgba(102, 126, 234, 0.1);
+}
+
+body.dark-mode .comparison-flag {
+    border-color: #667eea;
+    background: rgba(255, 255, 255, 0.95);
+}
+
+body.dark-mode .comparison-country-name {
+    color: #e0e0e0;
+}
+
+body.dark-mode .distance-indicator {
+    color: #a5b4fc;
+    background: rgba(102, 126, 234, 0.2);
+}
+
+body.dark-mode .distance-arrow {
+    color: #a5b4fc;
+}
+
+@media (max-width: 768px) {
+    .flag-comparison {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .flag-comparison-distance {
+        flex-direction: row;
+        min-width: auto;
+    }
+    
+    .distance-arrow {
+        transform: rotate(90deg);
+    }
+    
+    .comparison-flag {
+        width: 100px;
+        height: 67px;
+    }
+}
+
+.next-round-button {
+    margin-top: 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 25px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    text-transform: none;
+    letter-spacing: 0;
+    position: relative;
+    overflow: visible;
+    min-width: 180px;
+}
+
+.next-round-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.next-round-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.next-round-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.next-round-button.hidden {
+    display: none;
+}
+
+body.dark-mode .next-round-button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ffffff;
+    border: none;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+body.dark-mode .next-round-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
 /* Game Over Modal */
 .modal {
     position: fixed;
@@ -1213,16 +1419,22 @@ body {
     border-radius: 20px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     text-align: center;
-    max-width: 500px;
+    max-width: 900px;
+    max-height: 90vh;
     width: 90%;
     animation: modalPop 0.4s ease;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .filter-modal-content {
-    max-width: 700px;
-    max-height: 85vh;
+    max-width: 1000px;
+    max-height: 90vh;
     text-align: left;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     padding: 2rem;
 }
 
@@ -1231,6 +1443,7 @@ body {
     color: #666;
     margin-bottom: 2rem;
     font-size: 1rem;
+    flex-shrink: 0;
 }
 
 .filter-options {
@@ -1238,6 +1451,10 @@ body {
     flex-direction: column;
     gap: 2rem;
     margin-bottom: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .filter-section h3 {
@@ -1315,6 +1532,10 @@ body {
     display: flex;
     gap: 1rem;
     justify-content: center;
+    flex-shrink: 0;
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .apply-filter-button {
@@ -1741,6 +1962,14 @@ body {
         font-size: 1rem;
     }
 
+    .next-round-button {
+        padding: 0.85rem 2rem;
+        font-size: 0.95rem;
+        margin-top: 1rem;
+        border-radius: 12px;
+        min-width: 160px;
+    }
+
     /* Modal improvements */
     .modal-content {
         padding: 1.5rem;
@@ -1841,8 +2070,12 @@ body {
 
 /* Settings Modal */
 .settings-modal-content {
-    max-width: 500px;
+    max-width: 900px;
+    max-height: 90vh;
     text-align: left;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .settings-options {
@@ -1850,6 +2083,10 @@ body {
     flex-direction: column;
     gap: 1.5rem;
     margin-bottom: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .setting-item {
@@ -1909,9 +2146,11 @@ body {
 
 /* Statistics Modal */
 .stats-modal-content {
-    max-width: 700px;
-    max-height: 85vh;
-    overflow-y: auto;
+    max-width: 1000px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .stats-grid {
@@ -1952,7 +2191,11 @@ body {
 
 /* Hint Modal */
 .hint-modal-content {
-    max-width: 500px;
+    max-width: 800px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .hint-options {
@@ -1960,6 +2203,7 @@ body {
     grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
     margin-bottom: 1.5rem;
+    flex-shrink: 0;
 }
 
 .hint-option {
@@ -2009,6 +2253,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .hint-display.hidden {
@@ -2622,7 +2867,11 @@ body.dark-mode .country-sort-select {
 
 /* Game Mode Modal */
 .game-mode-modal-content {
-    max-width: 600px;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .game-mode-options {
@@ -2630,6 +2879,10 @@ body.dark-mode .country-sort-select {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .game-mode-option {
@@ -2673,9 +2926,11 @@ body.dark-mode .country-sort-select {
 
 /* Achievements Modal */
 .achievements-modal-content {
-    max-width: 800px;
-    max-height: 85vh;
-    overflow-y: auto;
+    max-width: 1200px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .achievements-grid {
@@ -2683,6 +2938,10 @@ body.dark-mode .country-sort-select {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .achievement-card {
@@ -2797,6 +3056,7 @@ body.dark-mode .country-sort-select {
     gap: 0.5rem;
     margin-bottom: 1.5rem;
     border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+    flex-shrink: 0;
 }
 
 .stat-tab {
@@ -2823,7 +3083,10 @@ body.dark-mode .country-sort-select {
 
 .stats-tab-content {
     display: none;
-    min-height: 300px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .stats-tab-content.active {
@@ -3002,13 +3265,19 @@ body.dark-mode .country-sort-select {
 
 /* Country Info Card */
 .country-info-modal-content {
-    max-width: 600px;
-    max-height: 85vh;
-    overflow-y: auto;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .country-info-content {
     text-align: left;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .country-info-section {
@@ -3052,15 +3321,18 @@ body.dark-mode .country-sort-select {
 
 /* Custom Country Sets */
 .custom-sets-modal-content {
-    max-width: 700px;
-    max-height: 85vh;
-    overflow-y: auto;
+    max-width: 1000px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .custom-sets-controls {
     display: flex;
     gap: 0.5rem;
     margin-bottom: 1.5rem;
+    flex-shrink: 0;
 }
 
 .custom-set-name-input {
@@ -3076,6 +3348,10 @@ body.dark-mode .country-sort-select {
     flex-direction: column;
     gap: 0.75rem;
     margin-bottom: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .custom-set-item {
@@ -3127,9 +3403,11 @@ body.dark-mode .country-sort-select {
 
 /* Custom Set Editor */
 .custom-set-editor-modal-content {
-    max-width: 800px;
-    max-height: 85vh;
-    overflow-y: auto;
+    max-width: 1200px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .custom-set-editor-controls {
@@ -3137,18 +3415,21 @@ body.dark-mode .country-sort-select {
     gap: 0.5rem;
     margin-bottom: 1rem;
     flex-wrap: wrap;
+    flex-shrink: 0;
 }
 
 .custom-set-countries-list {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    max-height: 400px;
     overflow-y: auto;
     margin-bottom: 1rem;
     border: 2px solid rgba(102, 126, 234, 0.1);
     border-radius: 8px;
     padding: 1rem;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .custom-set-country-item {
@@ -3207,7 +3488,11 @@ body.dark-mode .country-sort-select {
 
 /* Difficulty Levels */
 .difficulty-modal-content {
-    max-width: 600px;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .difficulty-options {
@@ -3215,6 +3500,10 @@ body.dark-mode .country-sort-select {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .difficulty-option {
@@ -3331,7 +3620,11 @@ body.dark-mode .country-sort-select {
 
 /* Share Modal */
 .share-modal-content {
-    max-width: 600px;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .share-preview {
@@ -3341,6 +3634,10 @@ body.dark-mode .country-sort-select {
     padding: 2rem;
     margin-bottom: 1.5rem;
     text-align: center;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .share-preview h3 {
@@ -3378,6 +3675,7 @@ body.dark-mode .country-sort-select {
     grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
     margin-bottom: 1rem;
+    flex-shrink: 0;
 }
 
 .share-button {
@@ -4051,7 +4349,11 @@ body.dark-mode .info-card-row-compact .info-value {
 
 /* Leaderboard Styles */
 .leaderboard-modal-content {
-    max-width: 600px;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .leaderboard-tabs {
@@ -4060,6 +4362,7 @@ body.dark-mode .info-card-row-compact .info-value {
     margin-bottom: 1.5rem;
     border-bottom: 2px solid #e5e7eb;
     padding-bottom: 0.5rem;
+    flex-shrink: 0;
 }
 
 .leaderboard-tab {
@@ -4085,8 +4388,10 @@ body.dark-mode .info-card-row-compact .info-value {
 }
 
 .leaderboard-content {
-    max-height: 500px;
     overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .leaderboard-entry {
@@ -4199,7 +4504,11 @@ body.dark-mode .score-value {
 
 /* Map Style Modal */
 .map-style-modal-content {
-    max-width: 700px;
+    max-width: 1000px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .map-style-options {
@@ -4207,6 +4516,10 @@ body.dark-mode .score-value {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .map-style-option {
@@ -4350,6 +4663,7 @@ body.dark-mode .map-style-option-inline.active {
     margin-bottom: 1.5rem;
     border-bottom: 2px solid #e5e7eb;
     padding-bottom: 0.5rem;
+    flex-shrink: 0;
 }
 
 .settings-tab {
@@ -4389,10 +4703,15 @@ body.dark-mode .map-style-option-inline.active {
 
 .settings-tab-content {
     display: none;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 0.5rem;
 }
 
 .settings-tab-content.active {
-    display: block;
+    display: flex;
+    flex-direction: column;
 }
 
 body.dark-mode .settings-tabs {

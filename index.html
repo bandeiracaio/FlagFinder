@@ -17,7 +17,7 @@
     <div class="game-container">
         <!-- Header -->
         <header class="game-header">
-            <div class="version-number">v1.0.1</div>
+            <div class="version-number">v1.0.2</div>
             <h1 class="game-title">FlagFinder</h1>
             <div class="header-controls">
                 <button id="game-mode-button" class="game-mode-button" aria-label="Game mode">
@@ -126,6 +126,21 @@
             <div class="feedback-content">
                 <span id="feedback-message" class="feedback-message"></span>
                 <span id="country-name" class="country-name"></span>
+                <div id="flag-comparison" class="flag-comparison hidden">
+                    <div class="flag-comparison-item">
+                        <img id="guessed-flag" class="comparison-flag" src="" alt="Guessed country flag">
+                        <span id="guessed-country-name" class="comparison-country-name"></span>
+                    </div>
+                    <div class="flag-comparison-distance">
+                        <span id="distance-indicator" class="distance-indicator"></span>
+                        <span class="distance-arrow">→</span>
+                    </div>
+                    <div class="flag-comparison-item">
+                        <img id="correct-flag" class="comparison-flag" src="" alt="Correct country flag">
+                        <span id="correct-country-name" class="comparison-country-name"></span>
+                    </div>
+                </div>
+                <button id="next-round-button" class="next-round-button hidden">Next Round</button>
             </div>
         </div>
 
@@ -824,7 +839,7 @@
                     <button class="game-mode-option" data-mode="time">
                         <span class="mode-icon">⏱️</span>
                         <span class="mode-name">Time Challenge</span>
-                        <span class="mode-description">3 seconds per flag</span>
+                        <span class="mode-description">4 seconds per flag</span>
                     </button>
                     <button class="game-mode-option" data-mode="endless">
                         <span class="mode-icon">♾️</span>

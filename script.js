@@ -20,7 +20,9 @@ const gameState = {
     bestAccuracy: Infinity, // Best (smallest) distance achieved
     correctAnswers: 0,
     incorrectAnswers: 0,
-    hintsUsed: [] // Track which hints were used this round
+    hintsUsed: [], // Track which hints were used this round
+    shuffledCountryPool: [], // Shuffled pool for non-endless modes
+    shuffledPoolIndex: 0 // Current index in shuffled pool
 };
 
 // Statistics stored in localStorage
@@ -121,6 +123,13 @@ const flagImage = document.getElementById('flag-image');
 const feedbackOverlay = document.getElementById('feedback-overlay');
 const feedbackMessage = document.getElementById('feedback-message');
 const countryName = document.getElementById('country-name');
+const nextRoundButton = document.getElementById('next-round-button');
+const flagComparison = document.getElementById('flag-comparison');
+const guessedFlag = document.getElementById('guessed-flag');
+const guessedCountryName = document.getElementById('guessed-country-name');
+const correctFlag = document.getElementById('correct-flag');
+const correctCountryName = document.getElementById('correct-country-name');
+const distanceIndicator = document.getElementById('distance-indicator');
 const gameOverModal = document.getElementById('game-over-modal');
 const finalScoreElement = document.getElementById('final-score');
 const bestStreakElement = document.getElementById('best-streak');
@@ -1598,7 +1607,8 @@ function handleTimeUp() {
     // Safety check for currentCountry
     if (!gameState.currentCountry || !gameState.currentCountry.latlng || !Array.isArray(gameState.currentCountry.latlng) || gameState.currentCountry.latlng.length < 2) {
         console.error('handleTimeUp: currentCountry or latlng is invalid');
-        nextRound();
+        // Show feedback and wait for button click instead of auto-advancing
+        showFeedback(false, 'Time up!', 'Invalid country data', true);
         return;
     }
     
@@ -1614,13 +1624,7 @@ function handleTimeUp() {
     gameState.streak = 0;
     updateUI();
     
-    setTimeout(() => {
-        if (currentGameMode === 'endless') {
-            endGame();
-        } else {
-            nextRound();
-        }
-    }, 2000);
+    // Note: nextRound() or endGame() will be called when user clicks "Next Round" button
 }
 
 // ==================== BLITZ MODE ====================
@@ -1677,7 +1681,7 @@ function endBlitzGame() {
     const flagsGuessed = gameState.correctAnswers + gameState.incorrectAnswers;
     const accuracy = flagsGuessed > 0 ? Math.round((gameState.correctAnswers / flagsGuessed) * 100) : 0;
     
-    showFeedback(true, `Blitz Complete!`, `Score: ${finalScore} | Flags: ${flagsGuessed} | Accuracy: ${accuracy}%`);
+    showFeedback(true, `Blitz Complete!`, `Score: ${finalScore} | Flags: ${flagsGuessed} | Accuracy: ${accuracy}%`, false);
     
     // Update statistics
     updateStatistics();
@@ -2004,6 +2008,10 @@ function generateMultipleChoice() {
 function handleMultipleChoiceAnswer(countryCode) {
     const isCorrect = countryCode === gameState.currentCountry.code;
     
+    // Find the guessed country object
+    const guessedCountry = gameState.allCountries.find(c => c.code === countryCode);
+    const correctCountry = gameState.currentCountry;
+    
     // Disable all buttons
     choiceOptions.forEach(button => {
         button.disabled = true;
@@ -2017,13 +2025,15 @@ function handleMultipleChoiceAnswer(countryCode) {
     
     if (isCorrect) {
         const distance = 0; // Perfect for multiple choice
-        showFeedback(true, distance, gameState.currentCountry.name);
+        const feedbackText = `Correct! +10 points (Perfect!)`;
+        showFeedback(true, feedbackText, correctCountry.name, true, guessedCountry || correctCountry, correctCountry, distance);
         gameState.score += 10;
         gameState.correctAnswers++;
         gameState.streak++;
         playSound('correct');
     } else {
-        showFeedback(false, Infinity, gameState.currentCountry.name);
+        const feedbackMessageText = `You selected ${guessedCountry?.name || 'Unknown'} and the correct country was ${correctCountry.name}.`;
+        showFeedback(false, 'Wrong!', feedbackMessageText, true, guessedCountry, correctCountry, null);
         gameState.score = Math.max(0, gameState.score - 5);
         gameState.incorrectAnswers++;
         gameState.streak = 0;
@@ -2032,15 +2042,7 @@ function handleMultipleChoiceAnswer(countryCode) {
     
     updateUI();
     
-    setTimeout(() => {
-        if (currentGameMode === 'endless' && !isCorrect) {
-            endGame();
-        } else if (currentGameMode !== 'endless') {
-            nextRound();
-        } else {
-            nextRound();
-        }
-    }, 2000);
+    // Note: nextRound() or endGame() will be called when user clicks "Next Round" button
 }
 
 // ==================== GAME HISTORY ====================
@@ -2163,6 +2165,11 @@ function useCustomSet(setId) {
     
     const countryCodes = new Set(set.countries);
     gameState.filteredCountries = gameState.allCountries.filter(c => countryCodes.has(c.code));
+    // Reset shuffled pool when custom set is selected (for non-endless modes)
+    if (currentGameMode !== 'endless') {
+        gameState.shuffledCountryPool = [];
+        gameState.shuffledPoolIndex = 0;
+    }
     gameState.currentFilter = `custom-${setId}`;
     
     if (filterLabel) {
@@ -2699,6 +2706,11 @@ function setDifficulty(difficulty) {
             // No custom filter, safe to reset to all countries
             if (!gameState.currentFilter || gameState.currentFilter.startsWith('difficulty-')) {
                 gameState.filteredCountries = [...gameState.allCountries];
+                // Reset shuffled pool when difficulty changes (for non-endless modes)
+                if (currentGameMode !== 'endless') {
+                    gameState.shuffledCountryPool = [];
+                    gameState.shuffledPoolIndex = 0;
+                }
                 gameState.currentFilter = 'all';
                 if (filterLabel) {
                     filterLabel.textContent = 'All Countries';
@@ -2724,6 +2736,11 @@ function setDifficulty(difficulty) {
                 if (filterLabel) {
                     filterLabel.textContent = difficultyLabel ? difficultyLabel.textContent : 'All Countries';
                 }
+            }
+            // Reset shuffled pool when difficulty changes (for non-endless modes)
+            if (currentGameMode !== 'endless') {
+                gameState.shuffledCountryPool = [];
+                gameState.shuffledPoolIndex = 0;
             }
         }
     }
@@ -3877,8 +3894,8 @@ function initMap() {
         keyboard: false
     });
     
-    // Position zoom controls at top right (moved from bottomright to avoid flag container)
-    gameState.map.zoomControl.setPosition('topright');
+    // Position zoom controls at bottom right
+    gameState.map.zoomControl.setPosition('bottomright');
     // Setup zoom button handlers
     setTimeout(() => {
         setupZoomButtonHandlers();
@@ -3926,6 +3943,11 @@ function initMap() {
 // Handle map click
 let lastClickTime = 0;
 async function handleMapClick(e) {
+    // Don't allow clicks if feedback is showing (waiting for button click)
+    if (!feedbackOverlay.classList.contains('hidden')) {
+        return;
+    }
+    
     if (!gameState.isWaitingForClick || !gameState.currentCountry) {
         return;
     }
@@ -3975,8 +3997,12 @@ async function handleMapClick(e) {
     } catch (error) {
         console.error('Error detecting country:', error);
         processingOverlay.classList.add('hidden');
-        showFeedback(false, 'Error detecting country. Please try again.');
+        showFeedback(false, 'Error detecting country. Please try again.', '', false);
         gameState.isWaitingForClick = true;
+        // Auto-hide error feedback after 2 seconds so user can try again
+        setTimeout(() => {
+            hideFeedback();
+        }, 2000);
     }
 }
 
@@ -4005,9 +4031,11 @@ async function detectCountry(lat, lng) {
         if (data.address && data.address.country_code) {
             const countryCode = data.address.country_code.toUpperCase();
             
-            // Find matching country in our list
+            // Find matching country in our list (check both countries and allCountries)
             const countryCodeLower = countryCode.toLowerCase();
             let country = gameState.countries.find(c => 
+                c.code === countryCodeLower
+            ) || gameState.allCountries.find(c => 
                 c.code === countryCodeLower
             );
             
@@ -4016,10 +4044,16 @@ async function detectCountry(lat, lng) {
                 const normalizedCountryName = normalizeCountryName(data.address.country);
                 country = gameState.countries.find(c => 
                     normalizeCountryName(c.name) === normalizedCountryName
+                ) || gameState.allCountries.find(c => 
+                    normalizeCountryName(c.name) === normalizedCountryName
                 );
             }
             
             if (country) {
+                // Ensure flag property exists
+                if (!country.flag && country.code) {
+                    country.flag = `https://flagcdn.com/w320/${country.code}.png`;
+                }
                 return country;
             }
             
@@ -4040,7 +4074,8 @@ async function detectCountry(lat, lng) {
                 return {
                     name: data.address.country,
                     code: countryCodeLower,
-                    latlng: [lat, lng]
+                    latlng: [lat, lng],
+                    flag: `https://flagcdn.com/w320/${countryCodeLower}.png`
                 };
             }
         }
@@ -4049,7 +4084,8 @@ async function detectCountry(lat, lng) {
         return {
             name: 'Unknown',
             code: 'xx',
-            latlng: [lat, lng]
+            latlng: [lat, lng],
+            flag: `https://flagcdn.com/w320/xx.png`
         };
     } catch (error) {
         console.error('Reverse geocoding error:', error);
@@ -4057,7 +4093,8 @@ async function detectCountry(lat, lng) {
         return {
             name: 'Unknown',
             code: 'xx',
-            latlng: [lat, lng]
+            latlng: [lat, lng],
+            flag: `https://flagcdn.com/w320/xx.png`
         };
     }
 }
@@ -4171,11 +4208,15 @@ function checkAnswer(clickedCountry, clickedLatLng) {
         
         updateUI();
         const multiplierText = multiplier > 1 ? ` (${multiplier}x streak!)` : '';
-        const distanceText = distance < 50 ? ` 🎯 ${formatDistance(distance)} away!` : ` (${formatDistance(distance)} away)`;
+        const capitalText = correctCountry.capital ? ` from ${correctCountry.capital}` : '';
+        const distanceText = distance < 50 
+            ? ` 🎯 ${formatDistance(distance)} away${capitalText}!` 
+            : ` (${formatDistance(distance)} away${capitalText})`;
         const feedbackText = currentGameMode === 'practice' 
             ? `Correct! ${distanceText}` 
             : `Correct! +${points} points${multiplierText}${distanceText}`;
-        showFeedback(true, feedbackText, correctCountry.name);
+        // Show flag comparison even for correct answers to show the guessed vs correct
+        showFeedback(true, feedbackText, correctCountry.name, true, clickedCountry, correctCountry, distance);
         
         // Play sound (only if not practice mode or sound enabled)
         if (currentGameMode !== 'practice') {
@@ -4259,8 +4300,10 @@ function checkAnswer(clickedCountry, clickedLatLng) {
         // Incorrect answer
         gameState.streak = 0;
         gameState.incorrectAnswers++;
-        const distanceText = `You were ${formatDistance(distance)} away`;
-        showFeedback(false, 'Wrong!', `Correct answer: ${correctCountry.name}. ${distanceText}.`);
+        const capitalText = correctCountry.capital ? ` from ${correctCountry.capital}` : '';
+        const distanceText = `You were ${formatDistance(distance)} away${capitalText}`;
+        const feedbackMessageText = `You selected ${clickedCountry.name} and the correct country was ${correctCountry.name}. ${distanceText}.`;
+        showFeedback(false, 'Wrong!', feedbackMessageText, true, clickedCountry, correctCountry, distance);
         
         // Play sound (only if not practice mode)
         if (currentGameMode !== 'practice') {
@@ -4312,24 +4355,10 @@ function checkAnswer(clickedCountry, clickedLatLng) {
         }, 1000);
     }
 
-    // Wait before next round (longer on mobile for better UX)
-    const delay = window.innerWidth <= 768 ? 3000 : 2500;
-    // In blitz mode, use shorter delay and show country info card
-    if (isBlitzMode) {
-        // Show country info card briefly, then continue
-        showCountryInfoCard(correctCountry, isCorrect, distance);
-        setTimeout(() => {
-            if (blitzTimeRemaining > 0) {
-                nextRound();
-            }
-        }, 1500); // Shorter delay for blitz
-    } else {
-        // Show country info card for other modes
-        showCountryInfoCard(correctCountry, isCorrect, distance);
-        setTimeout(() => {
-            nextRound();
-        }, delay);
-    }
+    // Show country info card
+    showCountryInfoCard(correctCountry, isCorrect, distance);
+    
+    // Note: nextRound() will be called when user clicks "Next Round" button
 }
 
 // Get streak multiplier
@@ -4343,10 +4372,78 @@ function getStreakMultiplier() {
 }
 
 // Show feedback message
-function showFeedback(isCorrect, message, countryNameText = '') {
+function showFeedback(isCorrect, message, countryNameText = '', showNextButton = true, guessedCountry = null, correctCountry = null, distance = null) {
     feedbackMessage.textContent = message;
     feedbackMessage.className = `feedback-message ${isCorrect ? 'correct' : 'incorrect'}`;
     countryName.textContent = countryNameText;
+    
+    // Show flag comparison if guessed country is provided (for incorrect answers or when showing comparison)
+    if (guessedCountry && correctCountry) {
+        // Ensure we have flag URLs - generate if missing (use w320 which we know works)
+        const guessedFlagUrl = guessedCountry.flag || (guessedCountry.code ? `https://flagcdn.com/w320/${guessedCountry.code}.png` : '');
+        const correctFlagUrl = correctCountry.flag || (correctCountry.code ? `https://flagcdn.com/w320/${correctCountry.code}.png` : '');
+        
+        // Set guessed country flag and name
+        if (guessedFlagUrl && guessedFlag) {
+            guessedFlag.src = guessedFlagUrl;
+            guessedFlag.alt = `${guessedCountry.name} flag`;
+            guessedFlag.style.display = 'block';
+            guessedFlag.onerror = function() {
+                console.error('Failed to load guessed flag:', guessedFlagUrl);
+                // Try alternative format
+                if (guessedCountry.code) {
+                    this.src = `https://flagcdn.com/256x192/${guessedCountry.code}.png`;
+                }
+            };
+        }
+        if (guessedCountryName) {
+            guessedCountryName.textContent = guessedCountry.name || 'Unknown';
+        }
+        
+        // Set correct country flag and name
+        if (correctFlagUrl && correctFlag) {
+            correctFlag.src = correctFlagUrl;
+            correctFlag.alt = `${correctCountry.name} flag`;
+            correctFlag.style.display = 'block';
+            correctFlag.onerror = function() {
+                console.error('Failed to load correct flag:', correctFlagUrl);
+                // Try alternative format
+                if (correctCountry.code) {
+                    this.src = `https://flagcdn.com/256x192/${correctCountry.code}.png`;
+                }
+            };
+        }
+        if (correctCountryName) {
+            correctCountryName.textContent = correctCountry.name || 'Unknown';
+        }
+        
+        // Set distance indicator
+        if (distance !== null && distance !== undefined && distanceIndicator) {
+            distanceIndicator.textContent = formatDistance(distance);
+        } else if (distanceIndicator) {
+            distanceIndicator.textContent = '';
+        }
+        
+        if (flagComparison) {
+            flagComparison.classList.remove('hidden');
+        }
+    } else {
+        if (flagComparison) {
+            flagComparison.classList.add('hidden');
+        }
+    }
+    
+    // Disable map clicks while feedback is showing
+    gameState.isWaitingForClick = false;
+    
+    // Show next round button (unless explicitly disabled)
+    if (nextRoundButton) {
+        if (showNextButton) {
+            nextRoundButton.classList.remove('hidden');
+        } else {
+            nextRoundButton.classList.add('hidden');
+        }
+    }
     
     // Animate feedback appearance
     feedbackOverlay.style.opacity = '0';
@@ -4356,13 +4453,24 @@ function showFeedback(isCorrect, message, countryNameText = '') {
     setTimeout(() => {
         feedbackOverlay.style.opacity = '1';
     }, 10);
-    
-    setTimeout(() => {
+}
+
+// Hide feedback overlay
+function hideFeedback() {
+    if (feedbackOverlay) {
         feedbackOverlay.style.opacity = '0';
+        // Hide flag comparison
+        if (flagComparison) {
+            flagComparison.classList.add('hidden');
+        }
         setTimeout(() => {
             feedbackOverlay.classList.add('hidden');
+            if (nextRoundButton) {
+                nextRoundButton.classList.add('hidden');
+            }
+            // Note: isWaitingForClick will be set to true in startRound() when next round begins
         }, 300);
-    }, 2000);
+    }
 }
 
 // Show celebration effect for streaks
@@ -4489,40 +4597,79 @@ function startRound() {
         throw new Error('No countries available. Try changing the filter or refresh the page.');
     }
 
-    // Select random country (avoid repeating the previous one)
-    // Use Fisher-Yates shuffle for better randomness, then pick from shuffled array
-    const shuffledPool = [...countryPool];
-    for (let i = shuffledPool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledPool[i], shuffledPool[j]] = [shuffledPool[j], shuffledPool[i]];
-    }
-    
-    // Find index of country that's not the previous one
-    let randomIndex = 0;
-    let attempts = 0;
-    do {
-        randomIndex = Math.floor(Math.random() * shuffledPool.length);
-        attempts++;
-        // Prevent infinite loop if there's only one country (shouldn't happen)
-        if (attempts > 10) break;
-    } while (shuffledPool[randomIndex] === gameState.previousCountry && shuffledPool.length > 1);
-    
-    // Use the shuffled pool for selection
-    const selectedFromPool = shuffledPool[randomIndex];
-    
-    // Safety check
-    if (!selectedFromPool) {
-        console.error('startRound: No country selected from pool');
-        throw new Error('Failed to select a country. Try changing the filter or refresh the page.');
-    }
-    
-    // For daily mode, use sequential countries
+    // For endless mode, use simple random selection (no shuffle needed)
+    // For all other modes, use a properly shuffled pool to avoid consecutive repeats
     let selectedCountry;
-    if (currentGameMode === 'daily' && dailyChallengeCountries.length > 0 && countryPool.length >= gameState.currentRound) {
+    
+    if (currentGameMode === 'endless') {
+        // Endless mode: simple random selection, can repeat
+        const randomIndex = Math.floor(Math.random() * countryPool.length);
+        selectedCountry = countryPool[randomIndex];
+    } else if (currentGameMode === 'daily' && dailyChallengeCountries.length > 0 && countryPool.length >= gameState.currentRound) {
+        // Daily mode: use sequential countries from the daily challenge list
         selectedCountry = countryPool[gameState.currentRound - 1];
     } else {
-        // Use the randomly selected country from shuffled pool
-        selectedCountry = selectedFromPool;
+        // All other modes: use shuffled pool system to avoid consecutive repeats
+        
+        // Check if we need to reshuffle (new game, filter changed, or pool exhausted)
+        const needsReshuffle = 
+            gameState.shuffledCountryPool.length === 0 || 
+            gameState.shuffledPoolIndex >= gameState.shuffledCountryPool.length ||
+            gameState.shuffledCountryPool.length !== countryPool.length ||
+            !gameState.shuffledCountryPool.some(c => countryPool.some(poolC => poolC.code === c.code));
+        
+        if (needsReshuffle) {
+            // Create a fresh shuffled pool using Fisher-Yates shuffle
+            gameState.shuffledCountryPool = [...countryPool];
+            for (let i = gameState.shuffledCountryPool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [gameState.shuffledCountryPool[i], gameState.shuffledCountryPool[j]] = 
+                    [gameState.shuffledCountryPool[j], gameState.shuffledCountryPool[i]];
+            }
+            gameState.shuffledPoolIndex = 0;
+        }
+        
+        // Get the next country from shuffled pool
+        let candidateCountry = gameState.shuffledCountryPool[gameState.shuffledPoolIndex];
+        gameState.shuffledPoolIndex++;
+        
+        // If this is the same as the previous country and we have more than one country, skip to next
+        if (gameState.previousCountry && 
+            candidateCountry && 
+            candidateCountry.code === gameState.previousCountry.code && 
+            countryPool.length > 1) {
+            // Move to next country in shuffled pool
+            if (gameState.shuffledPoolIndex < gameState.shuffledCountryPool.length) {
+                candidateCountry = gameState.shuffledCountryPool[gameState.shuffledPoolIndex];
+                gameState.shuffledPoolIndex++;
+            } else {
+                // We've exhausted the pool, reshuffle and take first (which won't be previous)
+                gameState.shuffledCountryPool = [...countryPool];
+                for (let i = gameState.shuffledCountryPool.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [gameState.shuffledCountryPool[i], gameState.shuffledCountryPool[j]] = 
+                        [gameState.shuffledCountryPool[j], gameState.shuffledCountryPool[i]];
+                }
+                // Ensure first country is not the previous one
+                if (gameState.previousCountry && 
+                    gameState.shuffledCountryPool.length > 1 && 
+                    gameState.shuffledCountryPool[0].code === gameState.previousCountry.code) {
+                    // Swap first with second
+                    [gameState.shuffledCountryPool[0], gameState.shuffledCountryPool[1]] = 
+                        [gameState.shuffledCountryPool[1], gameState.shuffledCountryPool[0]];
+                }
+                gameState.shuffledPoolIndex = 1;
+                candidateCountry = gameState.shuffledCountryPool[0];
+            }
+        }
+        
+        selectedCountry = candidateCountry;
+    }
+    
+    // Safety check
+    if (!selectedCountry) {
+        console.error('startRound: No country selected from pool');
+        throw new Error('Failed to select a country. Try changing the filter or refresh the page.');
     }
     
     // Validate selected country has required properties
@@ -4601,7 +4748,15 @@ function startRound() {
         });
     }
     
-    // Enable clicks
+    // Ensure feedback overlay is hidden before enabling clicks
+    if (!feedbackOverlay.classList.contains('hidden')) {
+        feedbackOverlay.classList.add('hidden');
+    }
+    if (nextRoundButton && !nextRoundButton.classList.contains('hidden')) {
+        nextRoundButton.classList.add('hidden');
+    }
+    
+    // Enable clicks only after ensuring feedback is hidden
     gameState.isWaitingForClick = true;
     
     // Reset hints for new round
@@ -4758,7 +4913,7 @@ function endGame() {
     
     // In practice mode, just show completion message
     if (currentGameMode === 'practice') {
-        showFeedback(true, 'Practice Complete!', 'Great job learning!');
+        showFeedback(true, 'Practice Complete!', 'Great job learning!', false);
     }
     
     gameOverModal.classList.remove('hidden');
@@ -4788,6 +4943,9 @@ function restartGame() {
     gameState.correctAnswers = 0;
     gameState.incorrectAnswers = 0;
     gameState.hintsUsed = [];
+    // Reset shuffled pool for non-endless modes
+    gameState.shuffledCountryPool = [];
+    gameState.shuffledPoolIndex = 0;
     
     // NOTE: We intentionally do NOT reset gameState.filteredCountries or gameState.currentFilter
     // These should persist across game restarts to maintain the user's filter selection
@@ -4813,6 +4971,63 @@ function restartGame() {
 
 // Event listeners
 restartButton.addEventListener('click', restartGame);
+
+// Next round button event listener
+if (nextRoundButton) {
+    nextRoundButton.addEventListener('click', () => {
+        // Prevent multiple clicks
+        if (nextRoundButton.disabled) {
+            return;
+        }
+        
+        // Disable button immediately to prevent double-clicks
+        nextRoundButton.disabled = true;
+        
+        // Ensure we're not waiting for a click (prevent map interactions)
+        gameState.isWaitingForClick = false;
+        
+        hideFeedback();
+        
+        // Wait for feedback to hide before proceeding
+        setTimeout(() => {
+            // Double-check feedback is hidden
+            if (!feedbackOverlay.classList.contains('hidden')) {
+                feedbackOverlay.classList.add('hidden');
+            }
+            
+            // Handle endless mode - end game if last answer was incorrect
+            if (currentGameMode === 'endless' && gameState.distances.length > 0) {
+                const lastDistance = gameState.distances[gameState.distances.length - 1];
+                if (!lastDistance.correct) {
+                    endGame();
+                    if (nextRoundButton) {
+                        nextRoundButton.disabled = false;
+                    }
+                    return;
+                }
+            }
+            
+            // Handle blitz mode - check if time is still remaining
+            if (currentGameMode === 'blitz' && blitzTimeRemaining <= 0) {
+                endBlitzMode();
+                if (nextRoundButton) {
+                    nextRoundButton.disabled = false;
+                }
+                return;
+            }
+            
+            // Only proceed to next round if feedback is hidden
+            if (feedbackOverlay.classList.contains('hidden')) {
+                nextRound();
+            }
+            
+            // Re-enable button for next time
+            if (nextRoundButton) {
+                nextRoundButton.disabled = false;
+            }
+        }, 400); // Wait for feedback animation to complete
+    });
+}
 
 // Keyboard accessibility
 document.addEventListener('keydown', (e) => {
@@ -5265,6 +5480,12 @@ function applyFilter(filterTypes, subtractTypes = []) {
         } else {
             gameState.currentFilter = activeFilters.join(',');
         }
+    }
+    
+    // Reset shuffled pool when filter changes (for non-endless modes)
+    if (currentGameMode !== 'endless') {
+        gameState.shuffledCountryPool = [];
+        gameState.shuffledPoolIndex = 0;
     }
     
     // Track filter usage for Explorer achievement

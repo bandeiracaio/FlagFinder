@@ -838,6 +838,9 @@ body {
     pointer-events: auto !important;
     margin-bottom: 10px !important;
     margin-right: 10px !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 .leaflet-control-zoom a {

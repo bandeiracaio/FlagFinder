@@ -1718,63 +1718,14 @@ function shouldContinueEndless() {
 // ==================== COUNTRY INFORMATION CARDS ====================
 
 // Show country info card after each round (integrated into flag container)
+// Note: Card content is now empty since info is shown in feedback popup
 function showCountryInfoCard(country, isCorrect, distance) {
-    // Get the integrated country info card element
+    // Hide the card since we show all info in the feedback popup now
     const infoCard = document.getElementById('country-info-card-integrated');
     if (!infoCard) return;
     
-    // Get country data (handle both array and string formats for capital)
-    const capital = country.capital 
-        ? (Array.isArray(country.capital) && country.capital[0] ? country.capital[0] : country.capital)
-        : 'N/A';
-    const population = country.population ? formatNumber(country.population) : 'N/A';
-    const area = country.area ? `${formatNumber(Math.round(country.area))} km²` : 'N/A';
-    const region = country.region || country.subregion || 'N/A';
-    
-    // Build card HTML
-    infoCard.innerHTML = `
-        <div class="info-card-integrated-content">
-            <div class="info-card-integrated-header">
-                <span class="info-card-status ${isCorrect ? 'correct' : 'incorrect'}">${isCorrect ? '✓' : '✗'}</span>
-                <h4>${country.name}</h4>
-            </div>
-            <div class="info-card-integrated-body">
-                <div class="info-card-row-compact">
-                    <span class="info-label">Capital:</span>
-                    <span class="info-value">${capital}</span>
-                </div>
-                <div class="info-card-row-compact">
-                    <span class="info-label">Population:</span>
-                    <span class="info-value">${population}</span>
-                </div>
-                <div class="info-card-row-compact">
-                    <span class="info-label">Area:</span>
-                    <span class="info-value">${area}</span>
-                </div>
-                <div class="info-card-row-compact">
-                    <span class="info-label">Region:</span>
-                    <span class="info-value">${region}</span>
-                </div>
-                ${distance !== undefined ? `
-                <div class="info-card-row-compact">
-                    <span class="info-label">Distance:</span>
-                    <span class="info-value ${isCorrect ? 'correct' : 'incorrect'}">${formatDistance(distance)}</span>
-                </div>
-                ` : ''}
-            </div>
-        </div>
-    `;
-    
-    // Show card with animation
-    infoCard.classList.remove('hidden');
-    
-    // Auto-hide after delay (shorter for blitz mode)
-    const hideDelay = currentGameMode === 'blitz' ? 1200 : 3000;
-    setTimeout(() => {
-        if (infoCard && !infoCard.classList.contains('hidden')) {
-            infoCard.classList.add('hidden');
-        }
-    }, hideDelay);
+    // Keep card hidden - all info is shown in feedback popup
+    infoCard.classList.add('hidden');
 }
 
 // ==================== LEADERBOARD SYSTEM ====================
@@ -2595,16 +2546,18 @@ const mapStyles = {
     political: {
         name: 'Political',
         icon: '🗺️',
-        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+        // Use Voyager WITH labels - borders are baked into tiles (no re-rendering needed!)
+        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        needsBorders: true
+        needsBorders: false // Borders are in the tiles - smooth like satellite mode!
     },
     dark: {
         name: 'Dark',
         icon: '🌙',
-        url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+        // Use Dark Matter WITH labels - borders are baked into tiles (no re-rendering needed!)
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        needsBorders: true
+        needsBorders: false // Borders are in the tiles - smooth like satellite mode!
     },
     satellite: {
         name: 'Satellite',
@@ -3943,14 +3896,24 @@ function initMap() {
     
     // Position zoom controls at bottom right
     gameState.map.zoomControl.setPosition('bottomright');
-    // Setup zoom button handlers
+    
+    // Ensure zoom controls are visible
     setTimeout(() => {
-        setupZoomButtonHandlers();
+        const zoomControl = gameState.map.zoomControl;
+        if (zoomControl) {
+            // Make sure zoom controls are visible
+            const zoomContainer = document.querySelector('.leaflet-control-zoom');
+            if (zoomContainer) {
+                zoomContainer.style.display = 'block';
+                zoomContainer.style.visibility = 'visible';
+                zoomContainer.style.opacity = '1';
+            }
+        }
     }, 200);
 
     // Add map tiles with modern, clean style
-    // Using CartoDB Voyager No Labels - modern, colorful, and clean
-    gameState.mapTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+    // Using CartoDB Voyager WITH labels - borders are baked into tiles for smooth performance
+    gameState.mapTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap contributors, © CARTO',
         maxZoom: 6,
         subdomains: 'abcd',

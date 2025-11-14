@@ -912,6 +912,31 @@ function showAchievementUnlock(achievement) {
     }, 3000);
 }
 
+// Show pool adjustment notification
+function showPoolAdjustmentNotification(poolSize, adjustedRounds) {
+    const notification = document.createElement('div');
+    notification.className = 'achievement-notification';
+    notification.innerHTML = `
+        <div class="achievement-notification-content">
+            <span class="achievement-notification-icon">ℹ️</span>
+            <div>
+                <div class="achievement-notification-title">Pool Size Adjusted</div>
+                <div class="achievement-notification-name">Only ${poolSize} ${poolSize === 1 ? 'country' : 'countries'} available. Game set to ${adjustedRounds} ${adjustedRounds === 1 ? 'round' : 'rounds'}.</div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 4000);
+}
+
 // Render achievements
 function renderAchievements() {
     if (!achievementsGrid) return;
@@ -988,9 +1013,25 @@ function setGameMode(mode) {
         gameModeLabel.textContent = modeLabels[mode] || 'Classic';
     }
     
-    // Show/hide timer for time challenge and blitz modes
+    // Show/hide timer for timed modes (time, blitz, classic, daily, endless)
     if (timerStatItem) {
-        timerStatItem.classList.toggle('hidden', mode !== 'time' && mode !== 'blitz');
+        const timedModes = ['time', 'blitz', 'classic', 'daily', 'endless'];
+        timerStatItem.classList.toggle('hidden', !timedModes.includes(mode));
+    }
+    
+    // Disable/enable filter button for daily challenge mode
+    if (filterButton) {
+        if (mode === 'daily') {
+            filterButton.disabled = true;
+            filterButton.title = 'Filters are disabled in Daily Challenge mode';
+            filterButton.style.opacity = '0.5';
+            filterButton.style.cursor = 'not-allowed';
+        } else {
+            filterButton.disabled = false;
+            filterButton.title = '';
+            filterButton.style.opacity = '';
+            filterButton.style.cursor = '';
+        }
     }
     
     // Save mode preference
@@ -1561,11 +1602,19 @@ function initializeDailyChallenge() {
 
 // ==================== TIME CHALLENGE MODE ====================
 
-// Start timer for time challenge mode
+// Start timer for time challenge mode and other timed modes
 function startTimer() {
-    if (currentGameMode !== 'time') return;
+    // Determine timer duration based on game mode
+    let timerDuration;
+    if (currentGameMode === 'time') {
+        timerDuration = 4; // Time challenge mode: 4 seconds
+    } else if (currentGameMode === 'classic' || currentGameMode === 'daily' || currentGameMode === 'endless') {
+        timerDuration = 15; // Classic, daily, and endless modes: 15 seconds
+    } else {
+        return; // No timer for other modes
+    }
     
-    timeRemaining = 4;
+    timeRemaining = timerDuration;
     if (timerElement) {
         timerElement.textContent = `${timeRemaining}s`;
         timerElement.classList.remove('warning');
@@ -1579,7 +1628,9 @@ function startTimer() {
         timeRemaining--;
         if (timerElement) {
             timerElement.textContent = `${timeRemaining}s`;
-            if (timeRemaining <= 1) {
+            // Show warning when time is running out (last 3 seconds for 15s timer, last 1 second for 4s timer)
+            const warningThreshold = timerDuration === 4 ? 1 : 3;
+            if (timeRemaining <= warningThreshold) {
                 timerElement.classList.add('warning');
             } else {
                 timerElement.classList.remove('warning');
@@ -1963,6 +2014,11 @@ function generateMultipleChoice() {
 
 // Handle multiple choice answer
 function handleMultipleChoiceAnswer(countryCode) {
+    // Stop timer if in timed modes
+    if (currentGameMode === 'time' || currentGameMode === 'classic' || currentGameMode === 'daily' || currentGameMode === 'endless') {
+        stopTimer();
+    }
+    
     const isCorrect = countryCode === gameState.currentCountry.code;
     
     // Find the guessed country object
@@ -4151,8 +4207,8 @@ function formatDistance(km) {
 
 // Check if answer is correct
 function checkAnswer(clickedCountry, clickedLatLng) {
-    // Stop timer if in time challenge mode
-    if (currentGameMode === 'time') {
+    // Stop timer if in timed modes (time, classic, daily, endless)
+    if (currentGameMode === 'time' || currentGameMode === 'classic' || currentGameMode === 'daily' || currentGameMode === 'endless') {
         stopTimer();
     }
     
@@ -4574,10 +4630,10 @@ function startRound() {
         return;
     }
 
-    // Use daily challenge countries if in daily mode
+    // Use daily challenge countries if in daily mode (ignore filters completely)
     let countryPool;
     if (currentGameMode === 'daily' && dailyChallengeCountries.length > 0) {
-        // Restore full country objects from daily challenge
+        // Daily challenge: always use the daily challenge pool, completely ignore any filters
         countryPool = dailyChallengeCountries.map(dc => {
             return gameState.allCountries.find(c => c.code === dc.code || c.name === dc.name);
         }).filter(c => c !== undefined);
@@ -4806,8 +4862,8 @@ function startRound() {
         hintButton.disabled = false;
     }
     
-    // Start timer for time challenge mode
-    if (currentGameMode === 'time') {
+    // Start timer for timed modes (time challenge: 4s, classic/daily/endless: 15s)
+    if (currentGameMode === 'time' || currentGameMode === 'classic' || currentGameMode === 'daily' || currentGameMode === 'endless') {
         startTimer();
     } else {
         stopTimer();
@@ -4988,6 +5044,32 @@ function restartGame() {
     
     // NOTE: We intentionally do NOT reset gameState.filteredCountries or gameState.currentFilter
     // These should persist across game restarts to maintain the user's filter selection
+    
+    // Auto-adjust totalRounds for classic and time challenge modes based on pool size
+    if (currentGameMode === 'classic' || currentGameMode === 'time') {
+        // Get the country pool size (daily challenge is handled separately in startRound)
+        let poolSize;
+        // Use filtered countries or all countries
+        poolSize = (gameState.filteredCountries && gameState.filteredCountries.length > 0) 
+            ? gameState.filteredCountries.length 
+            : gameState.allCountries.length;
+        
+        // If pool is smaller than default totalRounds, adjust it
+        const defaultRounds = 10;
+        if (poolSize < defaultRounds && poolSize > 0) {
+            gameState.totalRounds = poolSize;
+            // Show notification
+            setTimeout(() => {
+                showPoolAdjustmentNotification(poolSize, poolSize);
+            }, 500);
+        } else {
+            // Reset to default if pool is large enough
+            gameState.totalRounds = defaultRounds;
+        }
+    } else {
+        // Reset to default for other modes
+        gameState.totalRounds = 10;
+    }
     
     // Reset hints
     resetHints();
@@ -5761,6 +5843,10 @@ function initializeFilterSystem() {
     
     // Set up filter button click
     filterButton.addEventListener('click', () => {
+        // Don't allow filter changes in daily challenge mode
+        if (currentGameMode === 'daily') {
+            return;
+        }
         // Sync selectedFilters from current filter state before opening modal
         syncSelectedFiltersFromCurrent();
         

@@ -17,7 +17,7 @@
     <div class="game-container">
         <!-- Header -->
         <header class="game-header">
-            <div class="version-number">v1.0.3</div>
+            <div class="version-number">v1.0.2</div>
             <h1 class="game-title">FlagFinder</h1>
             <div class="header-controls">
                 <button id="game-mode-button" class="game-mode-button" aria-label="Game mode">
@@ -388,6 +388,7 @@
                 <div class="settings-tabs">
                     <button class="settings-tab active" data-tab="general">General</button>
                     <button class="settings-tab" data-tab="mobile">Mobile</button>
+                    <button class="settings-tab" data-tab="rules">Rules</button>
                 </div>
                 <div class="settings-tab-content active" id="settings-general">
                     <div class="settings-options">
@@ -529,6 +530,74 @@
                                 <span>Lock Landscape Orientation</span>
                             </label>
                             <p class="setting-description">Prevent rotation during gameplay</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-tab-content" id="settings-rules">
+                    <div class="settings-options">
+                        <div class="rules-section">
+                            <h3 class="rules-mode-title">Classic Mode</h3>
+                            <div class="rules-content">
+                                <p><strong>Win Condition:</strong> Complete all rounds (default 10 rounds, or adjusted to match country pool size)</p>
+                                <p><strong>Loss Condition:</strong> None - game ends after all rounds regardless of performance</p>
+                                <p><strong>How it ends:</strong> Automatically ends when all rounds are completed</p>
+                                <p><strong>Scoring:</strong> Points based on distance from correct country</p>
+                            </div>
+                        </div>
+                        
+                        <div class="rules-section">
+                            <h3 class="rules-mode-title">Daily Challenge Mode</h3>
+                            <div class="rules-content">
+                                <p><strong>Win Condition:</strong> Complete all rounds (uses daily challenge country pool)</p>
+                                <p><strong>Loss Condition:</strong> None - game ends after all rounds regardless of performance</p>
+                                <p><strong>How it ends:</strong> Automatically ends when all rounds are completed</p>
+                                <p><strong>Scoring:</strong> Points based on distance from correct country</p>
+                                <p><strong>Note:</strong> Uses a fixed country pool for the day (filters are ignored)</p>
+                            </div>
+                        </div>
+                        
+                        <div class="rules-section">
+                            <h3 class="rules-mode-title">Time Challenge Mode</h3>
+                            <div class="rules-content">
+                                <p><strong>Win Condition:</strong> Complete all rounds (default 10 rounds, or adjusted to match country pool size)</p>
+                                <p><strong>Loss Condition:</strong> None - game ends after all rounds regardless of performance</p>
+                                <p><strong>How it ends:</strong> Automatically ends when all rounds are completed</p>
+                                <p><strong>Timer:</strong> 15 seconds per round - time up marks answer as incorrect (-5 points, breaks streak)</p>
+                                <p><strong>Scoring:</strong> Points based on distance + time bonus</p>
+                            </div>
+                        </div>
+                        
+                        <div class="rules-section">
+                            <h3 class="rules-mode-title">Endless Mode</h3>
+                            <div class="rules-content">
+                                <p><strong>Win Condition:</strong> None - survival mode, continue as long as possible</p>
+                                <p><strong>Loss Condition:</strong> Streak reaches 0 after round 1</p>
+                                <p><strong>How it ends:</strong> Game ends immediately when streak reaches 0 (after getting an answer wrong)</p>
+                                <p><strong>Scoring:</strong> Points based on distance - continue as long as streak > 0</p>
+                                <p><strong>Note:</strong> If you get an answer wrong, streak resets to 0 and game ends after that round</p>
+                            </div>
+                        </div>
+                        
+                        <div class="rules-section">
+                            <h3 class="rules-mode-title">Blitz Mode</h3>
+                            <div class="rules-content">
+                                <p><strong>Win Condition:</strong> None - score-based mode</p>
+                                <p><strong>Loss Condition:</strong> None - ends when time runs out</p>
+                                <p><strong>How it ends:</strong> Automatically ends when 60-second timer expires</p>
+                                <p><strong>Scoring:</strong> Points based on distance - final score = total points earned in 60 seconds</p>
+                                <p><strong>Note:</strong> Game ends automatically when timer reaches 0</p>
+                            </div>
+                        </div>
+                        
+                        <div class="rules-section">
+                            <h3 class="rules-mode-title">Practice Mode</h3>
+                            <div class="rules-content">
+                                <p><strong>Win Condition:</strong> Complete all rounds (learning mode)</p>
+                                <p><strong>Loss Condition:</strong> None - no scoring or statistics</p>
+                                <p><strong>How it ends:</strong> Automatically ends when all rounds are completed</p>
+                                <p><strong>Scoring:</strong> No scoring - shows correct answer immediately</p>
+                                <p><strong>Note:</strong> Does not affect statistics or achievements</p>
+                            </div>
                         </div>
                     </div>
                 </div>
